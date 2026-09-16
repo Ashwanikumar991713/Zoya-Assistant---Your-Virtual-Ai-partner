@@ -29,6 +29,7 @@ declare global {
 export default function App() {
   const { isInstallable, isInstalled, isIOS, install } = usePWAInstall();
   const [showIOSGuide, setShowIOSGuide] = useState(false);
+  const [showAndroidGuide, setShowAndroidGuide] = useState(false);
   const [config, setConfig] = useState<AppConfig | null>(() => {
     const saved = localStorage.getItem("zoya_app_config");
     return saved ? JSON.parse(saved) : null;
@@ -265,6 +266,29 @@ export default function App() {
           </div>
         </div>
       )}
+      {showAndroidGuide && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-3xl bg-[#181A22] p-8 border border-white/10 shadow-2xl flex flex-col items-center text-center gap-6">
+            <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mb-2">
+              <Download size={32} className="text-cyan-400" />
+            </div>
+            <div>
+              <h3 className="text-xl font-medium text-white mb-2">Install App</h3>
+              <p className="text-sm text-white/60 leading-relaxed">
+                To install ZOYA on your device:<br/><br/>
+                1. Tap the <strong>Browser Menu</strong> (three dots ⋮) at the top right.<br/>
+                2. Tap <strong>Install app</strong> or <strong>Add to Home Screen</strong>.
+              </p>
+            </div>
+            <button
+              onClick={() => setShowAndroidGuide(false)}
+              className="w-full py-3 mt-2 rounded-xl bg-white/10 hover:bg-white/20 transition-colors text-white font-medium"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Header */}
       <header className="w-full flex justify-between items-center z-20 shrink-0 px-6 py-6 md:px-12 md:py-8">
@@ -317,29 +341,23 @@ export default function App() {
                     Your API Key
                   </button>
 
-                  {!isInstalled && isInstallable && (
+                  {!isInstalled && (
                     <button 
                       onClick={async () => {
-                        await install();
+                        if (isIOS) {
+                          setShowIOSGuide(true);
+                        } else {
+                          const success = await install();
+                          if (!success && !isInstallable) {
+                             setShowAndroidGuide(true);
+                          }
+                        }
                         setMenuOpen(false);
                       }}
                       className="w-full text-left px-4 py-3 text-sm text-cyan-400 hover:bg-white/5 transition-colors flex items-center gap-3 border-t border-white/5"
                     >
                       <Download size={16} />
                       Install App
-                    </button>
-                  )}
-
-                  {!isInstalled && isIOS && (
-                    <button 
-                      onClick={() => {
-                        setShowIOSGuide(true);
-                        setMenuOpen(false);
-                      }}
-                      className="w-full text-left px-4 py-3 text-sm text-cyan-400 hover:bg-white/5 transition-colors flex items-center gap-3 border-t border-white/5"
-                    >
-                      <Download size={16} />
-                      Install on iOS
                     </button>
                   )}
                   

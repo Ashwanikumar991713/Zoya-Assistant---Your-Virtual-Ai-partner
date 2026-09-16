@@ -39,7 +39,10 @@ export function usePWAInstall() {
   }, []);
 
   const install = async () => {
-    if (!deferredPrompt) return false;
+    if (!deferredPrompt) {
+      // Returns false immediately if no prompt is available, allowing a fallback UI
+      return false;
+    }
     await deferredPrompt.prompt();
     const { outcome } = await deferredPrompt.userChoice;
     if (outcome === 'accepted') {
