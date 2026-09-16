@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { Mic, MicOff, Loader2, Volume2, VolumeX, Keyboard, Send, Trash2, Video, Settings, MoreVertical, Edit3, Key } from "lucide-react";
+import { Mic, MicOff, Loader2, Volume2, VolumeX, Keyboard, Send, Trash2, Video, Settings, MoreVertical, Edit3, Key, Download } from "lucide-react";
 import { getZoyaResponse, getZoyaAudio, resetZoyaSession } from "./services/geminiService";
+import { usePWAInstall } from "./hooks/usePWAInstall";
 import { processCommand } from "./services/commandService";
 import { LiveSessionManager } from "./services/liveService";
 import Visualizer from "./components/Visualizer";
@@ -26,6 +27,8 @@ declare global {
 }
 
 export default function App() {
+  const { isInstallable, isInstalled, isIOS, install } = usePWAInstall();
+  const [showIOSGuide, setShowIOSGuide] = useState(false);
   const [config, setConfig] = useState<AppConfig | null>(() => {
     const saved = localStorage.getItem("zoya_app_config");
     return saved ? JSON.parse(saved) : null;
@@ -239,6 +242,29 @@ export default function App() {
           onClose={() => setShowPermissionModal(false)} 
         />
       )}
+      {showIOSGuide && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-3xl bg-[#181A22] p-8 border border-white/10 shadow-2xl flex flex-col items-center text-center gap-6">
+            <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mb-2">
+              <Download size={32} className="text-cyan-400" />
+            </div>
+            <div>
+              <h3 className="text-xl font-medium text-white mb-2">Install on iOS</h3>
+              <p className="text-sm text-white/60 leading-relaxed">
+                To install ZOYA on your iPhone or iPad:<br/><br/>
+                1. Tap the <strong>Share</strong> button in the Safari toolbar at the bottom.<br/>
+                2. Scroll down and tap <strong>Add to Home Screen</strong>.
+              </p>
+            </div>
+            <button
+              onClick={() => setShowIOSGuide(false)}
+              className="w-full py-3 mt-2 rounded-xl bg-white/10 hover:bg-white/20 transition-colors text-white font-medium"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Header */}
       <header className="w-full flex justify-between items-center z-20 shrink-0 px-6 py-6 md:px-12 md:py-8">
@@ -290,9 +316,35 @@ export default function App() {
                     <Key size={16} className="text-violet-400" />
                     Your API Key
                   </button>
+
+                  {!isInstalled && isInstallable && (
+                    <button 
+                      onClick={async () => {
+                        await install();
+                        setMenuOpen(false);
+                      }}
+                      className="w-full text-left px-4 py-3 text-sm text-cyan-400 hover:bg-white/5 transition-colors flex items-center gap-3 border-t border-white/5"
+                    >
+                      <Download size={16} />
+                      Install App
+                    </button>
+                  )}
+
+                  {!isInstalled && isIOS && (
+                    <button 
+                      onClick={() => {
+                        setShowIOSGuide(true);
+                        setMenuOpen(false);
+                      }}
+                      className="w-full text-left px-4 py-3 text-sm text-cyan-400 hover:bg-white/5 transition-colors flex items-center gap-3 border-t border-white/5"
+                    >
+                      <Download size={16} />
+                      Install on iOS
+                    </button>
+                  )}
                   
                   {/* Video Upload Label disguised as a button */}
-                  <label className="w-full text-left px-4 py-3 text-sm text-white/90 hover:bg-white/5 transition-colors flex items-center gap-3 cursor-pointer">
+                  <label className="w-full text-left px-4 py-3 text-sm text-white/90 hover:bg-white/5 transition-colors flex items-center gap-3 cursor-pointer border-t border-white/5">
                     <input 
                       type="file" 
                       accept="video/*" 

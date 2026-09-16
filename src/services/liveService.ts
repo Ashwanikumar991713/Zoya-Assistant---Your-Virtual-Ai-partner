@@ -82,6 +82,20 @@ export class LiveSessionManager {
       this.processor.connect(this.audioContext.destination);
 
       // Connect to Live API
+      const baseInstruction = this.config.systemPrompt
+        .replace(/{userName}/g, this.config.userName)
+        .replace(/{assistantName}/g, this.config.assistantName);
+      
+      const strictContext = `
+
+[SYSTEM NOTE: The human you are currently talking to is named "${this.config.userName}". You must remember this. Your name is "${this.config.assistantName}".]
+
+[CRITICAL INSTRUCTIONS FOR ACTIONS]
+1. WHATSAPP: If asked to send a WhatsApp message, DO NOT pretend to send it. You MUST ask the user for the target phone number (with country code) and the message content if not provided. Once you have both, use the 'executeBrowserAction' tool with actionType 'whatsapp', passing the 'target' (number) and 'query' (message).
+2. YOUTUBE/SPOTIFY: If asked to play media on YouTube or Spotify, use the tool with actionType 'youtube' or 'spotify' and the search term as the query.
+3. WEBSITES: If asked to open a website, use actionType 'open' and the website name as the query.
+4. You have the actual capability to execute these actions via the tool, so NEVER pretend you did it without calling the tool.`;
+
       this.sessionPromise = this.ai.live.connect({
         model: "gemini-3.1-flash-live-preview",
         config: {
@@ -89,7 +103,7 @@ export class LiveSessionManager {
           speechConfig: {
             voiceConfig: { prebuiltVoiceConfig: { voiceName: "Aoede" } },
           },
-          systemInstruction: this.config.systemPrompt,
+          systemInstruction: baseInstruction + strictContext,
           inputAudioTranscription: {},
           outputAudioTranscription: {},
           tools: [{

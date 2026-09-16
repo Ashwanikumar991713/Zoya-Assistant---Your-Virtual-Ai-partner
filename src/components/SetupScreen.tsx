@@ -47,10 +47,6 @@ export default function SetupScreen({ onComplete, onCancel, initialConfig }: Set
       finalPrompt = DEFAULT_PROMPT;
     }
 
-    finalPrompt = finalPrompt
-      .replace(/{userName}/g, userName)
-      .replace(/{assistantName}/g, assistantName);
-
     onComplete({
       apiKey: apiKey.trim(),
       userName: userName.trim(),
