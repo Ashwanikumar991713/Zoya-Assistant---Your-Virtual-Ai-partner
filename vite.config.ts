@@ -13,6 +13,7 @@ export default defineConfig(({ mode }) => {
       VitePWA({
         registerType: 'autoUpdate',
         includeAssets: ['icon.svg'],
+        useCredentials: true,
         manifest: {
           id: '/',
           name: 'Z.O.Y.A. AI',
