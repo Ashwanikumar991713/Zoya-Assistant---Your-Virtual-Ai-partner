@@ -1,4 +1,4 @@
-export async function playPCM(base64Data: string): Promise<void> {
+export async function playPCM(base64Data: string, volume: number = 1.0): Promise<void> {
   try {
     const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
     if (!AudioContextClass) {
@@ -20,7 +20,13 @@ export async function playPCM(base64Data: string): Promise<void> {
     }
     const source = audioCtx.createBufferSource();
     source.buffer = audioBuffer;
-    source.connect(audioCtx.destination);
+    
+    const gainNode = audioCtx.createGain();
+    gainNode.gain.value = volume;
+    
+    source.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+    
     source.start();
     
     return new Promise<void>(resolve => {

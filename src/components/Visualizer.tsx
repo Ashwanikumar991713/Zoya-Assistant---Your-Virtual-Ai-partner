@@ -7,108 +7,86 @@ interface VisualizerProps {
 }
 
 export default function Visualizer({ state }: VisualizerProps) {
-  const getRingAnimation = (index: number, reverse: boolean = false) => {
-    const baseSpeed = state === "listening" ? 3 : state === "processing" ? 1.5 : state === "speaking" ? 2 : 15;
-    return {
-      rotate: reverse ? [-360, 0] : [0, 360],
-      transition: { duration: baseSpeed + index * 2, repeat: Infinity, ease: "linear" }
-    };
-  };
-
-  const getPulseAnimation = () => {
-    if (state === "speaking") {
-      return {
-        scale: [1, 1.05, 0.98, 1.02, 1],
-        opacity: [0.8, 1, 0.8, 1, 0.8],
-        transition: { duration: 0.5, repeat: Infinity, ease: "easeInOut" }
-      };
-    }
-    if (state === "listening") {
-      return {
-        scale: [1, 1.02, 1],
-        opacity: [0.7, 1, 0.7],
-        transition: { duration: 1, repeat: Infinity, ease: "easeInOut" }
-      };
-    }
-    if (state === "processing") {
-      return {
-        scale: [0.98, 1.02, 0.98],
-        opacity: [0.6, 0.9, 0.6],
-        transition: { duration: 0.8, repeat: Infinity, ease: "linear" }
-      };
-    }
-    return {
-      scale: [1, 1.01, 1],
-      opacity: [0.4, 0.6, 0.4],
-      transition: { duration: 4, repeat: Infinity, ease: "easeInOut" }
-    };
-  };
-
-  // JARVIS color palette (Cyan/Blue) with Zoya's personality (Violet/Pink hints)
-  const getTheme = () => {
+  // Config for the rings
+  const getSpeed = () => {
     switch (state) {
-      case "listening": return { color: "rgba(139, 92, 246, 1)", glow: "shadow-violet-500/60", border: "border-violet-400" };
-      case "processing": return { color: "rgba(56, 189, 248, 1)", glow: "shadow-sky-400/80", border: "border-sky-400" };
-      case "speaking": return { color: "rgba(236, 72, 153, 1)", glow: "shadow-pink-500/80", border: "border-pink-400" };
-      default: return { color: "rgba(6, 182, 212, 0.8)", glow: "shadow-cyan-500/40", border: "border-cyan-500/50" }; // Cyan for idle
+      case "listening": return 2;
+      case "processing": return 1;
+      case "speaking": return 0.5;
+      default: return 8; // idle
     }
   };
 
-  const theme = getTheme();
+  const getCoreGlow = () => {
+    switch (state) {
+      case "listening": return "shadow-[0_0_80px_rgba(16,185,129,0.6)] bg-emerald-500"; // Greenish
+      case "processing": return "shadow-[0_0_100px_rgba(6,182,212,0.8)] bg-cyan-400"; // Cyan
+      case "speaking": return "shadow-[0_0_120px_rgba(236,72,153,0.8)] bg-pink-500"; // Pink
+      default: return "shadow-[0_0_60px_rgba(59,130,246,0.4)] bg-blue-500"; // Dim blue
+    }
+  };
+
+  const corePulse = () => {
+    if (state === "speaking") return { scale: [1, 1.2, 0.9, 1.1, 1], transition: { duration: 0.5, repeat: Infinity } };
+    if (state === "processing") return { scale: [0.95, 1.05, 0.95], transition: { duration: 0.8, repeat: Infinity } };
+    if (state === "listening") return { scale: [1, 1.05, 1], transition: { duration: 1.5, repeat: Infinity } };
+    return { scale: [1, 1.02, 1], transition: { duration: 4, repeat: Infinity } };
+  };
+
+  const speed = getSpeed();
 
   return (
-    <div className="absolute inset-0 flex items-center justify-center overflow-hidden pointer-events-none">
-      {/* Ambient Glow */}
-      <motion.div
-        animate={getPulseAnimation()}
-        className={`absolute w-[60%] h-[60%] rounded-full blur-[80px] ${theme.glow}`}
-        style={{ backgroundColor: theme.color, opacity: 0.15 }}
-      />
+    <div className="w-full h-full flex items-center justify-center relative [perspective:1000px]">
+      {/* Outer subtle boundary circle */}
+      <div className="absolute w-[280px] h-[280px] md:w-[350px] md:h-[350px] rounded-full border border-white/5" />
 
-      {/* Ring 1: Massive Outer Dashed */}
-      <motion.div
-        animate={getRingAnimation(4, false)}
-        className={`absolute w-[100%] h-[100%] rounded-full border-[1px] border-dashed ${theme.border} opacity-20`}
-      />
+      {/* 3D Atom Container */}
+      <div className="relative w-[240px] h-[240px] md:w-[300px] md:h-[300px] flex items-center justify-center [transform-style:preserve-3d]">
+        
+        {/* Ring 1 - Cyan */}
+        <motion.div
+          animate={{ rotateZ: 360 }}
+          transition={{ duration: speed * 1.5, repeat: Infinity, ease: "linear" }}
+          className="absolute w-full h-full rounded-full border-[3px] border-cyan-400/80 shadow-[0_0_15px_rgba(6,182,212,0.5)]"
+          style={{ transform: "rotateX(75deg) rotateY(25deg)", transformStyle: "preserve-3d" }}
+        />
 
-      {/* Ring 2: Segmented Thick Ring */}
-      <motion.div
-        animate={getRingAnimation(3, true)}
-        className={`absolute w-[85%] h-[85%] rounded-full border-[2px] border-dotted ${theme.border} opacity-30`}
-      />
+        {/* Ring 2 - Red/Pink */}
+        <motion.div
+          animate={{ rotateZ: -360 }}
+          transition={{ duration: speed * 1.8, repeat: Infinity, ease: "linear" }}
+          className="absolute w-full h-full rounded-full border-[3px] border-pink-500/80 shadow-[0_0_15px_rgba(236,72,153,0.5)]"
+          style={{ transform: "rotateX(75deg) rotateY(-45deg)", transformStyle: "preserve-3d" }}
+        />
 
-      {/* Ring 3: Scanner Ring (Solid with gaps) */}
-      <motion.div
-        animate={getRingAnimation(2, false)}
-        className={`absolute w-[70%] h-[70%] rounded-full border-[1px] ${theme.border} border-t-transparent border-b-transparent opacity-40`}
-      />
+        {/* Ring 3 - Green/Emerald */}
+        <motion.div
+          animate={{ rotateZ: 360 }}
+          transition={{ duration: speed * 2, repeat: Infinity, ease: "linear" }}
+          className="absolute w-full h-full rounded-full border-[3px] border-emerald-400/80 shadow-[0_0_15px_rgba(52,211,153,0.5)]"
+          style={{ transform: "rotateX(75deg) rotateY(85deg)", transformStyle: "preserve-3d" }}
+        />
 
-      {/* Ring 4: Inner Dashed */}
-      <motion.div
-        animate={getRingAnimation(1, true)}
-        className={`absolute w-[55%] h-[55%] rounded-full border-[2px] border-dashed ${theme.border} opacity-50`}
-      />
-      
-      {/* Ring 5: Core HUD Ring */}
-      <motion.div
-        animate={getRingAnimation(0, false)}
-        className={`absolute w-[40%] h-[40%] rounded-full border-[4px] border-dotted ${theme.border} opacity-70`}
-      />
+        {/* Ring 4 - Subtle White/Silver for extra depth */}
+        <motion.div
+          animate={{ rotateZ: -360 }}
+          transition={{ duration: speed * 2.5, repeat: Infinity, ease: "linear" }}
+          className="absolute w-[115%] h-[115%] rounded-full border-[1px] border-white/20"
+          style={{ transform: "rotateX(80deg) rotateY(0deg)", transformStyle: "preserve-3d" }}
+        />
 
-      {/* Core Circle */}
-      <motion.div
-        animate={getPulseAnimation()}
-        className={`absolute w-[25%] h-[25%] rounded-full border-[1px] ${theme.border} bg-black/40 backdrop-blur-md flex items-center justify-center shadow-[inset_0_0_30px_rgba(0,0,0,0.5)]`}
-        style={{ boxShadow: `0 0 40px ${theme.color}, inset 0 0 30px ${theme.color}` }}
-      >
-        {/* Center Text */}
-        <div 
-          className="font-bold tracking-[0.3em] text-xl md:text-3xl lg:text-4xl text-white"
-          style={{ textShadow: `0 0 15px ${theme.color}, 0 0 30px ${theme.color}` }}
+        {/* Core Sphere */}
+        <motion.div
+          animate={corePulse()}
+          className={`absolute w-[100px] h-[100px] md:w-[120px] md:h-[120px] rounded-full z-10 transition-colors duration-500 ease-in-out ${getCoreGlow()}`}
+          style={{
+            background: `radial-gradient(circle at 30% 30%, rgba(255,255,255,0.8) 0%, ${state === 'idle' ? '#1d4ed8' : 'transparent'} 40%, rgba(0,0,0,0.8) 100%)`,
+          }}
         >
-          ZOYA
-        </div>
-      </motion.div>
+          {/* Inner core lighting effect */}
+          <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-transparent via-white/20 to-white/60 opacity-50" />
+        </motion.div>
+      </div>
     </div>
   );
 }

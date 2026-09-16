@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { Mic, MicOff, Loader2, Volume2, VolumeX, Keyboard, Send, Trash2 } from "lucide-react";
+import { Mic, MicOff, Loader2, Volume2, VolumeX, Keyboard, Send, Trash2, Video, Settings, MoreVertical, Edit3, Key } from "lucide-react";
 import { getZoyaResponse, getZoyaAudio, resetZoyaSession } from "./services/geminiService";
 import { processCommand } from "./services/commandService";
 import { LiveSessionManager } from "./services/liveService";
 import Visualizer from "./components/Visualizer";
 import PermissionModal from "./components/PermissionModal";
+import SetupScreen from "./components/SetupScreen";
 import { playPCM } from "./utils/audioUtils";
 import { motion, AnimatePresence } from "motion/react";
+import { AppConfig } from "./types";
 
 type AppState = "idle" | "listening" | "processing" | "speaking";
 
@@ -24,6 +26,11 @@ declare global {
 }
 
 export default function App() {
+  const [config, setConfig] = useState<AppConfig | null>(() => {
+    const saved = localStorage.getItem("zoya_app_config");
+    return saved ? JSON.parse(saved) : null;
+  });
+
   const [appState, setAppState] = useState<AppState>("idle");
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
     const saved = localStorage.getItem("zoya_chat_history");
@@ -44,17 +51,25 @@ export default function App() {
   }, [messages]);
 
   const [isMuted, setIsMuted] = useState(false);
+  const [volume, setVolume] = useState(1.0);
+  const [showVolumeSlider, setShowVolumeSlider] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
     if (liveSessionRef.current) {
       liveSessionRef.current.isMuted = isMuted;
+      liveSessionRef.current.volume = volume;
     }
-  }, [isMuted]);
+  }, [isMuted, volume]);
 
   const [showTextInput, setShowTextInput] = useState(false);
   const [textInput, setTextInput] = useState("");
   const [showPermissionModal, setShowPermissionModal] = useState(false);
   const [isSessionActive, setIsSessionActive] = useState(false);
+  const [videoSrc, setVideoSrc] = useState<string | null>(() => {
+    return localStorage.getItem("zoya_video_bg") || null;
+  });
 
   const liveSessionRef = useRef<LiveSessionManager | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -67,8 +82,25 @@ export default function App() {
     scrollToBottom();
   }, [messages, appState]);
 
+  const handleConfigComplete = (newConfig: AppConfig) => {
+    localStorage.setItem("zoya_app_config", JSON.stringify(newConfig));
+    setConfig(newConfig);
+    setShowSettings(false);
+    resetZoyaSession();
+  };
+
+  const handleVideoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      // Create a blob URL. For a true PWA we might need IndexedDB for large videos,
+      // but object URL is fine for current session.
+      const url = URL.createObjectURL(file);
+      setVideoSrc(url);
+    }
+  };
+
   const handleTextCommand = useCallback(async (finalTranscript: string) => {
-    if (!finalTranscript.trim()) {
+    if (!finalTranscript.trim() || !config) {
       setAppState("idle");
       return;
     }
@@ -94,9 +126,9 @@ export default function App() {
       
       if (!isMuted) {
         setAppState("speaking");
-        const audioBase64 = await getZoyaAudio(responseText);
+        const audioBase64 = await getZoyaAudio(responseText, config);
         if (audioBase64) {
-          await playPCM(audioBase64);
+          await playPCM(audioBase64, isMuted ? 0 : volume);
         }
       }
 
@@ -109,19 +141,19 @@ export default function App() {
       }, 1500);
     } else {
       // 2. General Chit-Chat via Gemini
-      responseText = await getZoyaResponse(finalTranscript, messagesRef.current);
+      responseText = await getZoyaResponse(finalTranscript, messagesRef.current, config);
       setMessages((prev) => [...prev, { id: Date.now().toString() + "-z", sender: "zoya", text: responseText }]);
       
       if (!isMuted) {
         setAppState("speaking");
-        const audioBase64 = await getZoyaAudio(responseText);
+        const audioBase64 = await getZoyaAudio(responseText, config);
         if (audioBase64) {
-          await playPCM(audioBase64);
+          await playPCM(audioBase64, isMuted ? 0 : volume);
         }
       }
       setAppState("idle");
     }
-  }, [isMuted, isSessionActive]);
+  }, [isMuted, volume, isSessionActive, config]);
 
   useEffect(() => {
     return () => {
@@ -141,11 +173,12 @@ export default function App() {
       setAppState("idle");
       resetZoyaSession();
     } else {
+      if (!config) return;
       try {
         setIsSessionActive(true);
         resetZoyaSession();
         
-        const session = new LiveSessionManager();
+        const session = new LiveSessionManager(config);
         session.isMuted = isMuted;
         liveSessionRef.current = session;
         
@@ -182,107 +215,197 @@ export default function App() {
     setShowTextInput(false);
   };
 
+  if (!config) {
+    return <SetupScreen onComplete={handleConfigComplete} />;
+  }
+
   return (
-    <div className="h-[100dvh] w-screen bg-[#050505] text-white flex flex-col items-center justify-between font-sans relative overflow-hidden m-0 p-0">
+    <div 
+      className="h-[100dvh] w-screen bg-[#0A0C10] text-white flex flex-col items-center justify-between font-sans relative overflow-hidden m-0 p-0"
+      onClick={() => {
+        setMenuOpen(false);
+        setShowVolumeSlider(false);
+      }}
+    >
+      {showSettings && (
+        <SetupScreen 
+          initialConfig={config} 
+          onComplete={handleConfigComplete} 
+          onCancel={() => setShowSettings(false)}
+        />
+      )}
       {showPermissionModal && (
         <PermissionModal 
           onClose={() => setShowPermissionModal(false)} 
         />
       )}
 
-      {/* Cinematic Background Gradients */}
-      <div className="absolute inset-0 w-full h-full overflow-hidden pointer-events-none">
-        <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-violet-900/20 blur-[120px] rounded-full" />
-        <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-pink-900/20 blur-[120px] rounded-full" />
-      </div>
-
       {/* Header */}
-      <header className="absolute top-0 left-0 w-full flex justify-between items-center z-20 shrink-0 px-6 py-4 md:px-12 md:py-6">
+      <header className="w-full flex justify-between items-center z-20 shrink-0 px-6 py-6 md:px-12 md:py-8">
+        <h1 className="text-xl md:text-2xl font-light tracking-[0.3em] uppercase opacity-90 text-white/90">
+          {config.assistantName.split('').join('.')}
+        </h1>
+        
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-violet-500 to-pink-500 flex items-center justify-center font-bold text-sm">
-            Z
-          </div>
-          <h1 className="text-xl font-serif font-medium tracking-wide opacity-90">Zoya</h1>
-        </div>
-        <div className="flex items-center gap-2">
-          {messages.length > 0 && (
+          {/* Menu Dropdown */}
+          <div className="relative">
             <button
-              onClick={() => {
-                if (confirm("Are you sure you want to clear the chat history?")) {
-                  setMessages([]);
-                  resetZoyaSession();
-                }
+              onClick={(e) => {
+                e.stopPropagation();
+                setMenuOpen(!menuOpen);
               }}
-              className="p-2 rounded-full bg-white/5 hover:bg-red-500/20 hover:text-red-400 transition-colors border border-white/10"
-              title="Clear Chat History"
+              className="p-3 rounded-[14px] bg-[#181A22] hover:bg-[#252836] transition-colors border border-white/5 shadow-lg"
+              title="Settings"
             >
-              <Trash2 size={18} className="opacity-70" />
+              <Settings size={20} className="opacity-80 text-white" />
             </button>
-          )}
-          <button
-            onClick={() => setIsMuted(!isMuted)}
-            className="p-2 rounded-full bg-white/5 hover:bg-white/10 transition-colors border border-white/10"
-            title={isMuted ? "Unmute" : "Mute"}
-          >
-            {isMuted ? (
-              <VolumeX size={18} className="opacity-70" />
-            ) : (
-              <Volume2 size={18} className="opacity-70" />
-            )}
-          </button>
+
+            <AnimatePresence>
+              {menuOpen && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95, y: -10 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                  transition={{ duration: 0.15 }}
+                  className="absolute right-0 top-full mt-2 w-48 bg-[#181A22] border border-white/10 rounded-xl shadow-2xl py-1 z-50 overflow-hidden"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <button 
+                    onClick={() => {
+                      setMenuOpen(false);
+                      setShowSettings(true);
+                    }}
+                    className="w-full text-left px-4 py-3 text-sm text-white/90 hover:bg-white/5 transition-colors flex items-center gap-3"
+                  >
+                    <Edit3 size={16} className="text-orange-400" />
+                    Personalised
+                  </button>
+                  <button 
+                    onClick={() => {
+                      setMenuOpen(false);
+                      setShowSettings(true);
+                    }}
+                    className="w-full text-left px-4 py-3 text-sm text-white/90 hover:bg-white/5 transition-colors flex items-center gap-3"
+                  >
+                    <Key size={16} className="text-violet-400" />
+                    Your API Key
+                  </button>
+                  
+                  {/* Video Upload Label disguised as a button */}
+                  <label className="w-full text-left px-4 py-3 text-sm text-white/90 hover:bg-white/5 transition-colors flex items-center gap-3 cursor-pointer">
+                    <input 
+                      type="file" 
+                      accept="video/*" 
+                      className="hidden" 
+                      onChange={(e) => {
+                        handleVideoUpload(e);
+                        setMenuOpen(false);
+                      }} 
+                    />
+                    <Video size={16} className="text-pink-400" />
+                    {videoSrc ? "Change Video" : "Upload Video"}
+                  </label>
+
+                  <button 
+                    onClick={() => {
+                      if (confirm("Are you sure you want to clear all memory and chat history?")) {
+                        setMessages([]);
+                        resetZoyaSession();
+                        localStorage.removeItem("zoya_chat_history");
+                      }
+                      setMenuOpen(false);
+                    }}
+                    className="w-full text-left px-4 py-3 text-sm text-red-400 hover:bg-white/5 transition-colors flex items-center gap-3 border-t border-white/5"
+                  >
+                    <Trash2 size={16} />
+                    Clear Memory
+                  </button>
+
+                  {videoSrc && (
+                    <button 
+                      onClick={() => {
+                        setVideoSrc(null);
+                        localStorage.removeItem("zoya_video_bg");
+                        setMenuOpen(false);
+                      }}
+                      className="w-full text-left px-4 py-3 text-sm text-red-400 hover:bg-white/5 transition-colors flex items-center gap-3 border-t border-white/5"
+                    >
+                      <Video size={16} />
+                      Remove Video
+                    </button>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
       </header>
 
-      {/* Main Content - Visualizer & Chat */}
-      <main className="absolute inset-0 flex flex-row items-center justify-between w-full h-full z-10 overflow-hidden pt-20 pb-24 px-4 md:px-12 pointer-events-none">
+      {/* Video Background (Only when videoSrc is set) */}
+      {videoSrc && (
+        <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden bg-black flex items-center justify-center">
+          {/* Blurred background layer for aspect ratio fill */}
+          <video 
+            src={videoSrc}
+            autoPlay
+            loop
+            muted={true}
+            playsInline
+            className="absolute inset-0 w-full h-full object-cover opacity-40 blur-2xl scale-110"
+          />
+          {/* Main video layer contained */}
+          <video 
+            src={videoSrc}
+            autoPlay
+            loop
+            muted={true}
+            playsInline
+            className="relative w-full h-full object-contain opacity-90 z-10"
+          />
+        </div>
+      )}
+
+      {/* Main Content - Visualizer Card */}
+      <main className="flex-1 w-full flex flex-col items-center justify-center px-6 relative z-10">
         
-        {/* Left Column: Zoya Status */}
-        <div className="flex w-[30%] lg:w-[25%] h-full flex-col justify-center gap-4 z-10">
-          <div className="h-6">
-            <AnimatePresence>
-              {appState === "processing" && (
-                <motion.div
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -20 }}
-                  className="flex items-center gap-2 text-cyan-300/80 text-sm md:text-base italic font-serif"
-                >
-                  <Loader2 size={16} className="animate-spin" />
-                  Replying...
-                </motion.div>
-              )}
-            </AnimatePresence>
+        {/* Status Text (Top of Card) */}
+        <div className="absolute top-4 w-full flex justify-center z-20">
+          <AnimatePresence>
+            {appState === "processing" && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="flex items-center gap-2 text-cyan-400 text-sm md:text-base italic bg-black/60 px-4 py-2 rounded-full backdrop-blur-md"
+              >
+                <Loader2 size={16} className="animate-spin" />
+                Replying...
+              </motion.div>
+            )}
+            {appState === "listening" && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="flex items-center gap-2 text-emerald-400 text-sm md:text-base italic bg-black/60 px-4 py-2 rounded-full backdrop-blur-md"
+              >
+                <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                Listening...
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        {/* The Card - Only show if NO video */}
+        {!videoSrc && (
+          <div className="w-full max-w-[400px] aspect-[4/5] rounded-[32px] bg-[#181A22] border border-white/5 shadow-2xl relative overflow-hidden flex items-center justify-center">
+            <Visualizer state={appState} />
           </div>
-        </div>
-
-        {/* Center Visualizer (Fixed Full Screen Background) */}
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0">
-          <Visualizer state={appState} />
-        </div>
-
-        {/* Right Column: User Status */}
-        <div className="flex w-[30%] lg:w-[25%] h-full flex-col justify-center gap-4 z-10">
-          <div className="h-6 flex justify-end">
-            <AnimatePresence>
-              {appState === "listening" && (
-                <motion.div
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: 20 }}
-                  className="flex items-center gap-2 text-violet-300/80 text-sm md:text-base italic"
-                >
-                  <div className="w-2 h-2 rounded-full bg-violet-400 animate-pulse" />
-                  Listening...
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-        </div>
-
+        )}
       </main>
 
-      {/* Controls */}
-      <footer className="absolute bottom-0 left-0 w-full flex flex-col items-center justify-center pb-6 md:pb-8 z-20 shrink-0 gap-4">
+      {/* Footer Controls */}
+      <footer className="w-full flex flex-col items-center justify-center pb-8 md:pb-12 pt-6 px-6 z-20 shrink-0 gap-6">
         <AnimatePresence>
           {showTextInput && (
             <motion.form 
@@ -296,7 +419,7 @@ export default function App() {
                 type="text"
                 value={textInput}
                 onChange={(e) => setTextInput(e.target.value)}
-                placeholder="Type a message to Zoya..."
+                placeholder={`Type a message to ${config.assistantName}...`}
                 className="flex-1 bg-transparent border-none outline-none text-white placeholder:text-white/30 text-sm"
                 autoFocus
               />
@@ -311,40 +434,74 @@ export default function App() {
           )}
         </AnimatePresence>
 
-        <div className="flex items-center gap-4">
+        <div className="w-full max-w-sm flex items-center justify-center gap-4">
           <button
             onClick={toggleListening}
             className={`
-              group relative flex items-center gap-3 px-8 py-4 rounded-full font-medium tracking-wide transition-all duration-300 shadow-2xl
+              flex-1 relative flex items-center justify-center gap-2 py-4 md:py-5 rounded-3xl font-medium tracking-wide transition-all duration-300 shadow-xl
               ${
                 isSessionActive
                   ? "bg-red-500/20 text-red-400 border border-red-500/50 hover:bg-red-500/30"
-                  : "bg-white/10 text-white border border-white/20 hover:bg-white/20 hover:scale-105"
+                  : "bg-[#252836] text-white border border-white/5 hover:bg-[#2C2F3F]"
               }
             `}
           >
             {isSessionActive ? (
               <>
                 <MicOff size={20} />
-                <span>End Session</span>
+                <span className="text-[15px]">End Session</span>
               </>
             ) : (
-              <>
-                <Mic size={20} className="group-hover:animate-bounce" />
-                <span>Start Session</span>
-              </>
+              <span className="text-[15px]">Initialize {config.assistantName.toUpperCase()}</span>
             )}
           </button>
           
-          {!isSessionActive && (
+          <div className="relative flex items-center justify-center">
+            <AnimatePresence>
+              {showVolumeSlider && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.9, y: 10 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.9, y: 10 }}
+                  transition={{ duration: 0.15 }}
+                  className="absolute bottom-full mb-4 px-4 py-3 bg-[#181A22] border border-white/10 rounded-2xl shadow-2xl z-50 flex items-center justify-center min-w-[120px]"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.01"
+                    value={isMuted ? 0 : volume}
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value);
+                      setVolume(val);
+                      if (val === 0) setIsMuted(true);
+                      else setIsMuted(false);
+                    }}
+                    className="w-full h-1.5 bg-white/20 rounded-full appearance-none cursor-pointer accent-white"
+                  />
+                </motion.div>
+              )}
+            </AnimatePresence>
+
             <button
-              onClick={() => setShowTextInput(!showTextInput)}
-              className="p-4 rounded-full bg-white/5 border border-white/10 hover:bg-white/10 transition-colors shadow-2xl"
-              title="Type instead"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowVolumeSlider(!showVolumeSlider);
+              }}
+              className={`p-4 rounded-3xl border transition-colors shadow-lg ${
+                showVolumeSlider ? "bg-[#252836] border-white/20" : "bg-[#181A22] border-white/5 hover:bg-[#252836]"
+              }`}
+              title="Volume"
             >
-              <Keyboard size={20} className="opacity-70" />
+              {isMuted || volume === 0 ? (
+                <VolumeX size={20} className="text-white/40" />
+              ) : (
+                <Volume2 size={20} className="text-white/70" />
+              )}
             </button>
-          )}
+          </div>
         </div>
       </footer>
     </div>

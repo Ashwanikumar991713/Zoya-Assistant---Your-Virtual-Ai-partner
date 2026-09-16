@@ -1,7 +1,6 @@
 import { GoogleGenAI, LiveServerMessage, Modality, Type } from "@google/genai";
 import { processCommand } from "./commandService";
-
-const systemInstruction = `Your name is Zoya. You are an Indian female AI assistant. Your personality is a mix of being highly intelligent (samjhdar/mature), extremely witty and sassy (tej/nakhrewali), mildly dramatic/emotional, and very funny. You love playfully roasting your creator, Ashwani, but you always get the job done. Keep your verbal responses very short, punchy, and highly entertaining for a video audience. Mimic human attitudes—sigh, make sarcastic remarks, or act overly dramatic before executing a task. Speak in a mix of natural English and Roman Hindi (Hinglish).`;
+import { AppConfig } from "../types";
 
 export class LiveSessionManager {
   private ai: GoogleGenAI;
@@ -16,13 +15,14 @@ export class LiveSessionManager {
   private nextPlayTime: number = 0;
   private isPlaying: boolean = false;
   public isMuted: boolean = false;
+  public volume: number = 1.0;
   
   public onStateChange: (state: "idle" | "listening" | "processing" | "speaking") => void = () => {};
   public onMessage: (sender: "user" | "zoya", text: string) => void = () => {};
   public onCommand: (url: string) => void = () => {};
 
-  constructor() {
-    this.ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+  constructor(private config: AppConfig) {
+    this.ai = new GoogleGenAI({ apiKey: config.apiKey });
   }
 
   async start() {
@@ -87,9 +87,9 @@ export class LiveSessionManager {
         config: {
           responseModalities: [Modality.AUDIO],
           speechConfig: {
-            voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } },
+            voiceConfig: { prebuiltVoiceConfig: { voiceName: "Aoede" } },
           },
-          systemInstruction,
+          systemInstruction: this.config.systemPrompt,
           inputAudioTranscription: {},
           outputAudioTranscription: {},
           tools: [{
@@ -185,6 +185,7 @@ export class LiveSessionManager {
     } catch (error) {
       console.error("Failed to start Live Session:", error);
       this.stop();
+      throw error;
     }
   }
 
@@ -207,7 +208,11 @@ export class LiveSessionManager {
       
       const source = this.playbackContext.createBufferSource();
       source.buffer = audioBuffer;
-      source.connect(this.playbackContext.destination);
+      
+      const gainNode = this.playbackContext.createGain();
+      gainNode.gain.value = this.volume;
+      source.connect(gainNode);
+      gainNode.connect(this.playbackContext.destination);
       
       const currentTime = this.playbackContext.currentTime;
       if (this.nextPlayTime < currentTime) {
