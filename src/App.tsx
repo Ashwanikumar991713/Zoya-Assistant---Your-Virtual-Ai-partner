@@ -9,9 +9,7 @@ import PermissionModal from "./components/PermissionModal";
 import SetupScreen from "./components/SetupScreen";
 import { playPCM } from "./utils/audioUtils";
 import { motion, AnimatePresence } from "motion/react";
-import { AppConfig } from "./types";
-
-type AppState = "idle" | "listening" | "processing" | "speaking";
+import { AppConfig, AppState } from "./types";
 
 interface ChatMessage {
   id: string;
@@ -188,6 +186,11 @@ export default function App() {
         
         session.onStateChange = (state) => {
           setAppState(state);
+          if (state === "idle") {
+            setIsSessionActive(false);
+          } else {
+            setIsSessionActive(true);
+          }
         };
         
         session.onMessage = (sender, text) => {
@@ -439,14 +442,14 @@ export default function App() {
       <main className="flex-1 w-full flex flex-col items-center justify-center px-6 relative z-10">
         
         {/* Status Text (Top of Card) */}
-        <div className="absolute top-4 w-full flex justify-center z-20">
+        <div className="absolute top-4 w-full flex justify-center z-20 pointer-events-none">
           <AnimatePresence>
             {appState === "processing" && (
               <motion.div
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
-                className="flex items-center gap-2 text-cyan-400 text-sm md:text-base italic bg-black/60 px-4 py-2 rounded-full backdrop-blur-md"
+                className="flex items-center gap-2 text-cyan-400 text-sm md:text-base italic bg-black/60 px-4 py-2 rounded-full backdrop-blur-md border border-cyan-500/20 shadow-lg"
               >
                 <Loader2 size={16} className="animate-spin" />
                 Replying...
@@ -457,10 +460,32 @@ export default function App() {
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
-                className="flex items-center gap-2 text-emerald-400 text-sm md:text-base italic bg-black/60 px-4 py-2 rounded-full backdrop-blur-md"
+                className="flex items-center gap-2 text-emerald-400 text-sm md:text-base italic bg-black/60 px-4 py-2 rounded-full backdrop-blur-md border border-emerald-500/20 shadow-lg"
               >
                 <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                 Listening...
+              </motion.div>
+            )}
+            {appState === "speaking" && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="flex items-center gap-2 text-pink-400 text-sm md:text-base italic bg-black/60 px-4 py-2 rounded-full backdrop-blur-md border border-pink-500/20 shadow-lg"
+              >
+                <Volume2 size={16} className="animate-pulse" />
+                Speaking...
+              </motion.div>
+            )}
+            {appState === "reconnecting" && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="flex items-center gap-2 text-amber-400 text-sm md:text-base italic bg-black/60 px-4 py-2 rounded-full backdrop-blur-md border border-amber-500/20 shadow-lg"
+              >
+                <Loader2 size={16} className="animate-spin" />
+                Reconnecting...
               </motion.div>
             )}
           </AnimatePresence>
@@ -468,7 +493,11 @@ export default function App() {
 
         {/* The Card - Only show if NO video */}
         {!videoSrc && (
-          <div className="w-full max-w-[400px] aspect-[4/5] rounded-[32px] bg-[#181A22] border border-white/5 shadow-2xl relative overflow-hidden flex items-center justify-center">
+          <div 
+            onClick={toggleListening}
+            title={isSessionActive ? "Tap to end session" : "Tap to speak"}
+            className="w-full max-w-[400px] aspect-[4/5] rounded-[32px] bg-[#181A22] border border-white/5 shadow-2xl relative overflow-hidden flex items-center justify-center cursor-pointer transition-transform hover:scale-[1.01] active:scale-[0.99]"
+          >
             <Visualizer state={appState} />
           </div>
         )}
@@ -516,7 +545,12 @@ export default function App() {
               }
             `}
           >
-            {isSessionActive ? (
+            {appState === "reconnecting" ? (
+              <>
+                <Loader2 size={20} className="animate-spin text-amber-400" />
+                <span className="text-[15px] text-amber-400">Reconnecting...</span>
+              </>
+            ) : isSessionActive ? (
               <>
                 <MicOff size={20} />
                 <span className="text-[15px]">End Session</span>

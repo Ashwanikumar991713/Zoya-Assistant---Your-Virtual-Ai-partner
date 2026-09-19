@@ -30,7 +30,12 @@ export async function playPCM(base64Data: string, volume: number = 1.0): Promise
     source.start();
     
     return new Promise<void>(resolve => {
-      source.onended = () => resolve();
+      source.onended = () => {
+        try {
+          audioCtx.close();
+        } catch {}
+        resolve();
+      };
     });
   } catch (error) {
     console.error("Error playing audio:", error);

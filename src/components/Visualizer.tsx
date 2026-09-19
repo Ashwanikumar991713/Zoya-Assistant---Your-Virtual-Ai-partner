@@ -1,6 +1,6 @@
 import { motion } from "motion/react";
 
-type VisualizerState = "idle" | "listening" | "processing" | "speaking";
+type VisualizerState = "idle" | "listening" | "processing" | "speaking" | "reconnecting";
 
 interface VisualizerProps {
   state: VisualizerState;
@@ -13,6 +13,7 @@ export default function Visualizer({ state }: VisualizerProps) {
       case "listening": return 2;
       case "processing": return 1;
       case "speaking": return 0.5;
+      case "reconnecting": return 1.2;
       default: return 8; // idle
     }
   };
@@ -22,6 +23,7 @@ export default function Visualizer({ state }: VisualizerProps) {
       case "listening": return "shadow-[0_0_80px_rgba(16,185,129,0.6)] bg-emerald-500"; // Greenish
       case "processing": return "shadow-[0_0_100px_rgba(6,182,212,0.8)] bg-cyan-400"; // Cyan
       case "speaking": return "shadow-[0_0_120px_rgba(236,72,153,0.8)] bg-pink-500"; // Pink
+      case "reconnecting": return "shadow-[0_0_90px_rgba(245,158,11,0.7)] bg-amber-500"; // Amber
       default: return "shadow-[0_0_60px_rgba(59,130,246,0.4)] bg-blue-500"; // Dim blue
     }
   };
@@ -29,6 +31,7 @@ export default function Visualizer({ state }: VisualizerProps) {
   const corePulse = () => {
     if (state === "speaking") return { scale: [1, 1.2, 0.9, 1.1, 1], transition: { duration: 0.5, repeat: Infinity } };
     if (state === "processing") return { scale: [0.95, 1.05, 0.95], transition: { duration: 0.8, repeat: Infinity } };
+    if (state === "reconnecting") return { scale: [0.9, 1.1, 0.9], transition: { duration: 0.7, repeat: Infinity } };
     if (state === "listening") return { scale: [1, 1.05, 1], transition: { duration: 1.5, repeat: Infinity } };
     return { scale: [1, 1.02, 1], transition: { duration: 4, repeat: Infinity } };
   };
