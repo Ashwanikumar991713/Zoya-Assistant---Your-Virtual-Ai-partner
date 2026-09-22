@@ -55,9 +55,9 @@ export default function App() {
   }, [messages]);
 
   useEffect(() => {
-    if (config?.assistantName) {
-      document.title = config.assistantName;
-    }
+    document.title = config?.assistantName 
+      ? `${config.assistantName} - Virtual Companion`
+      : "Your Virtual Companion";
   }, [config?.assistantName]);
 
   const [isMuted, setIsMuted] = useState(false);

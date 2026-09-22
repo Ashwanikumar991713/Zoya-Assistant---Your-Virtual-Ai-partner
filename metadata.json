@@ -1,6 +1,6 @@
 {
-  "name": "Zoya - AI Voice Assistant",
-  "description": "A sassy, witty, and intelligent Indian female AI voice assistant.",
+  "name": "Your Virtual Companion",
+  "description": "Your personalized interactive AI voice companion.",
   "requestFramePermissions": [
     "microphone"
   ],

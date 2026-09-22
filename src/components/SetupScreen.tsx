@@ -211,7 +211,7 @@ export default function SetupScreen({ onComplete, onCancel, initialConfig }: Set
                   type="text" 
                   value={assistantName}
                   onChange={(e) => setAssistantName(e.target.value)}
-                  placeholder="e.g., Maya, Zoya"
+                  placeholder="e.g., Maya, Tara, Priya"
                   className="w-full bg-black/40 border border-white/10 rounded-xl px-3.5 py-2.5 sm:py-3 text-xs sm:text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-cyan-500 transition-colors"
                 />
               </div>

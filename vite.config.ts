@@ -12,7 +12,7 @@ export default defineConfig(({ mode }) => {
       tailwindcss(),
       VitePWA({
         registerType: 'autoUpdate',
-        includeAssets: ['icon.svg'],
+        includeAssets: ['icon.svg', 'apple-touch-icon.png'],
         useCredentials: true,
         workbox: {
           cleanupOutdatedCaches: true,
@@ -21,9 +21,9 @@ export default defineConfig(({ mode }) => {
         },
         manifest: {
           id: '/',
-          name: 'Virtual Companion AI',
-          short_name: 'Companion',
-          description: 'Personalized interactive AI voice companion.',
+          name: 'Your Virtual Companion',
+          short_name: 'Virtual Companion',
+          description: 'Your personalized interactive AI voice companion.',
           theme_color: '#0A0C10',
           background_color: '#0A0C10',
           display: 'standalone',
