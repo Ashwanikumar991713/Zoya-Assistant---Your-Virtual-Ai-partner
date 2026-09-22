@@ -98,7 +98,7 @@ export async function getZoyaAudio(text: string, config: AppConfig): Promise<str
         responseModalities: ["AUDIO"],
         speechConfig: {
           voiceConfig: {
-            prebuiltVoiceConfig: { voiceName: "Aoede" },
+            prebuiltVoiceConfig: { voiceName: config.voiceName?.trim() || "Kore" },
           },
         },
       },

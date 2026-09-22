@@ -264,14 +264,23 @@ CRITICAL INSTRUCTIONS FOR THIS FOCUS:
 4. ACTIVE MEMORY & INTENT: Treat this as your personal active memory, thoughts, or purpose for this conversation. You have your own thoughts and genuine interest regarding this topic.`;
     }
 
+    const heartTouchingVoiceInstruction = `
+
+[HEART-TOUCHING & SWEET VOICE GUIDELINES]
+1. VOCAL WARMTH & TONE: Your voice must be exceptionally sweet, soothing, caring, and gentle ("bahut hi pyari, meethi aur dil ko chhoo lene wali aawaz").
+2. PACING & INTIMACY: Speak at a calm, melodic, relaxed pace with sincere tenderness in your vocal cadence. Never sound rushed, robotic, or monotonous.
+3. EMPATHY & EMOTIONAL RESONANCE: Make the user feel deeply heard, valued, and emotionally comforted. Use tender Hindi/Hinglish phrasing with natural affection (e.g., "Ji", "Aap", "Mujhe sach me aapse baat karke bahut sukoon milta hai", "Aap bilkul chinta mat kijiye").`;
+
+    const voiceToUse = this.config.voiceName?.trim() || "Kore";
+
     const connectConfig = {
       model: "gemini-3.8-live",
       config: {
         responseModalities: [Modality.AUDIO],
         speechConfig: {
-          voiceConfig: { prebuiltVoiceConfig: { voiceName: "Aoede" } },
+          voiceConfig: { prebuiltVoiceConfig: { voiceName: voiceToUse } },
         },
-        systemInstruction: baseInstruction + strictContext + topicContext,
+        systemInstruction: baseInstruction + strictContext + topicContext + heartTouchingVoiceInstruction,
         inputAudioTranscription: {},
         outputAudioTranscription: {},
         tools: [
@@ -559,7 +568,19 @@ CRITICAL INSTRUCTIONS FOR THIS FOCUS:
   }
 
   updateConfig(newConfig: AppConfig) {
+    const voiceChanged = this.config.voiceName !== newConfig.voiceName;
     this.config = newConfig;
+
+    if (voiceChanged && this.activeSession && !this.isExplicitlyStopped) {
+      try {
+        this.activeSession.close();
+      } catch {}
+      this.activeSession = null;
+      this.isConnecting = false;
+      this.connectLiveSession().catch((e) => console.error("Error reconnecting with new voice:", e));
+      return;
+    }
+
     if (this.activeSession && newConfig.activeTopicOrScript?.trim()) {
       try {
         this.activeSession.sendRealtimeInput({

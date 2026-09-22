@@ -3,6 +3,7 @@ export interface AppConfig {
   userName: string;
   assistantName: string;
   systemPrompt: string;
+  voiceName?: string;
   activeTopicOrScript?: string;
 }
 
