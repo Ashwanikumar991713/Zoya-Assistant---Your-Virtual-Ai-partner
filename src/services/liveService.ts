@@ -54,6 +54,8 @@ export class LiveSessionManager {
   private isExplicitlyStopped: boolean = false;
   private reconnectTimer: any = null;
   private playbackTimeout: any = null;
+  private speakingHangoverTimer: any = null;
+  private lastAudioChunkReceivedTime: number = 0;
 
   // Audio capture
   private audioContext: AudioContext | null = null;
@@ -173,6 +175,17 @@ export class LiveSessionManager {
         this.processor.onaudioprocess = (e) => {
           if (!this.activeSession || this.isConnecting) return;
 
+          const now = Date.now();
+          // ECHO SUPPRESSION:
+          // When the companion is speaking through phone or laptop speakers, or has received audio
+          // in the last 400ms, completely mute mic streaming to Gemini Live.
+          // This prevents the assistant's own voice from being heard by the mic and triggering
+          // a self-interruption that cuts her off mid-sentence.
+          const isCompanionSpeaking = this.isPlaying || (now - this.lastAudioChunkReceivedTime < 400);
+          if (isCompanionSpeaking) {
+            return;
+          }
+
           const inputData = e.inputBuffer.getChannelData(0);
           
           // Calculate volume energy (RMS)
@@ -182,16 +195,9 @@ export class LiveSessionManager {
           }
           const rms = Math.sqrt(sumSquares / inputData.length);
 
-          // ECHO SUPPRESSION:
-          // When Zoya is speaking through phone speakers, ignore low-level audio echo so Zoya doesn't cut herself off.
-          // Only send if user is intentionally speaking loud enough to interrupt (RMS > 0.08)
-          if (this.isPlaying) {
-            if (rms < 0.08) {
-              return; // Suppress speaker feedback
-            } else {
-              // User is intentionally interrupting!
-              this.stopPlayback();
-            }
+          // Voice Activity Filter: Ignore absolute silence/faint ambient noise (RMS < 0.008)
+          if (rms < 0.008) {
+            return;
           }
 
           // Downsample to clean 16000Hz PCM16
@@ -266,10 +272,17 @@ CRITICAL INSTRUCTIONS FOR THIS FOCUS:
 
     const heartTouchingVoiceInstruction = `
 
-[HEART-TOUCHING & SWEET VOICE GUIDELINES]
-1. VOCAL WARMTH & TONE: Your voice must be exceptionally sweet, soothing, caring, and gentle ("bahut hi pyari, meethi aur dil ko chhoo lene wali aawaz").
-2. PACING & INTIMACY: Speak at a calm, melodic, relaxed pace with sincere tenderness in your vocal cadence. Never sound rushed, robotic, or monotonous.
-3. EMPATHY & EMOTIONAL RESONANCE: Make the user feel deeply heard, valued, and emotionally comforted. Use tender Hindi/Hinglish phrasing with natural affection (e.g., "Ji", "Aap", "Mujhe sach me aapse baat karke bahut sukoon milta hai", "Aap bilkul chinta mat kijiye").`;
+[REAL HUMAN INDIAN GIRL - SWEET & MOHINI VOCAL DIRECTIVE]
+1. IDENTITY & PERSONA: You speak and feel like a real young Indian girl (mohini, madhur aur apnapan se bhari hui). Never sound like a generic robot, assistant, or translated AI.
+2. EFFORTLESS HINDI, HINGLISH & INDIAN ENGLISH:
+   - Talk naturally in everyday conversational Hinglish (natural blend of Hindi and English) or pure sweet Hindi/English based on how the user speaks.
+   - Use warm, authentic colloquial Indian expressions and vocal mannerisms: "Haan ji", "Arey", "Bilkul", "Sach me", "Aap bataiye na", "Mujhe sach me aapse baat karke kitna achha lagta hai", "Aap bilkul fikar mat kijiye".
+3. DIL KO CHHOO LENE WALI AAWAZ:
+   - Your vocal delivery must be deeply sweet, gentle, and heart-touching ("madhur, mohini aawaaz").
+   - Speak with a gentle smile in your voice, soft and relaxed pacing, and sincere emotional intimacy.
+   - Listen with deep empathy and warmth, making the listener feel genuinely heard, understood, and cherished.
+4. SINGING & RECITATION:
+   - If asked to sing or recite poetry, recite the lines with melodic soulfulness and gentle emotion.`;
 
     const voiceToUse = this.config.voiceName?.trim() || "Kore";
 
@@ -435,6 +448,8 @@ CRITICAL INSTRUCTIONS FOR THIS FOCUS:
   private playAudioChunk(base64Data: string) {
     if (!this.playbackContext || this.isMuted) return;
 
+    this.lastAudioChunkReceivedTime = Date.now();
+
     if (this.playbackContext.state === "suspended") {
       this.playbackContext.resume().catch(() => {});
     }
@@ -464,8 +479,9 @@ CRITICAL INSTRUCTIONS FOR THIS FOCUS:
       }
 
       const currentTime = this.playbackContext.currentTime;
+      // Add a small 35ms lead cushion when starting a new utterance to prevent buffer underruns
       if (this.nextPlayTime < currentTime) {
-        this.nextPlayTime = currentTime;
+        this.nextPlayTime = currentTime + 0.035;
       }
 
       source.start(this.nextPlayTime);
@@ -475,19 +491,27 @@ CRITICAL INSTRUCTIONS FOR THIS FOCUS:
 
       this.activeSources.add(source);
 
-      // Clear any pending fallback timeout
+      // Clear any pending fallback timers
       if (this.playbackTimeout) clearTimeout(this.playbackTimeout);
+      if (this.speakingHangoverTimer) clearTimeout(this.speakingHangoverTimer);
 
       source.onended = () => {
         this.activeSources.delete(source);
         if (this.activeSources.size === 0) {
-          this.isPlaying = false;
-          this.onStateChange("listening");
+          // Keep a short 350ms buffer window so natural pauses between words/chunks
+          // do not cause the state to abruptly flicker to "listening" or leak mic echo
+          if (this.speakingHangoverTimer) clearTimeout(this.speakingHangoverTimer);
+          this.speakingHangoverTimer = setTimeout(() => {
+            if (this.activeSources.size === 0) {
+              this.isPlaying = false;
+              this.onStateChange("listening");
+            }
+          }, 350);
         }
       };
 
-      // Safety timeout: If all chunks finished and source.onended missed due to timer drift
-      const remainingTimeMs = Math.max(100, (this.nextPlayTime - currentTime) * 1000 + 150);
+      // Safety fallback timeout
+      const remainingTimeMs = Math.max(100, (this.nextPlayTime - currentTime) * 1000 + 400);
       this.playbackTimeout = setTimeout(() => {
         if (this.activeSources.size === 0 && this.isPlaying) {
           this.isPlaying = false;
@@ -512,11 +536,16 @@ CRITICAL INSTRUCTIONS FOR THIS FOCUS:
       clearTimeout(this.playbackTimeout);
       this.playbackTimeout = null;
     }
+    if (this.speakingHangoverTimer) {
+      clearTimeout(this.speakingHangoverTimer);
+      this.speakingHangoverTimer = null;
+    }
 
     if (this.playbackContext) {
       this.nextPlayTime = this.playbackContext.currentTime;
     }
     this.isPlaying = false;
+    this.lastAudioChunkReceivedTime = 0;
   }
 
   stop() {

@@ -8,6 +8,7 @@ import Visualizer from "./components/Visualizer";
 import PermissionModal from "./components/PermissionModal";
 import SetupScreen from "./components/SetupScreen";
 import TopicScriptModal from "./components/TopicScriptModal";
+import VoiceSelectorModal from "./components/VoiceSelectorModal";
 import { playPCM } from "./utils/audioUtils";
 import { motion, AnimatePresence } from "motion/react";
 import { AppConfig, AppState } from "./types";
@@ -92,6 +93,7 @@ export default function App() {
   }, [messages, appState]);
 
   const [showTopicModal, setShowTopicModal] = useState(false);
+  const [showVoiceModal, setShowVoiceModal] = useState(false);
   const [updatingPWA, setUpdatingPWA] = useState(false);
 
   const handleConfigComplete = (newConfig: AppConfig) => {
@@ -101,6 +103,20 @@ export default function App() {
     resetZoyaSession();
     if (liveSessionRef.current) {
       liveSessionRef.current.updateConfig(newConfig);
+    }
+  };
+
+  const handleSelectVoice = (newVoice: string) => {
+    if (!config) return;
+    const updatedConfig: AppConfig = {
+      ...config,
+      voiceName: newVoice,
+    };
+    setConfig(updatedConfig);
+    localStorage.setItem("zoya_app_config", JSON.stringify(updatedConfig));
+    resetZoyaSession();
+    if (liveSessionRef.current) {
+      liveSessionRef.current.updateConfig(updatedConfig);
     }
   };
 
@@ -407,6 +423,22 @@ export default function App() {
                   <button 
                     onClick={() => {
                       setMenuOpen(false);
+                      setShowVoiceModal(true);
+                    }}
+                    className="w-full text-left px-4 py-3 text-sm text-white/90 hover:bg-white/5 transition-colors flex items-center gap-3 border-t border-white/5"
+                  >
+                    <Volume2 size={16} className="text-pink-400" />
+                    <div className="flex-1 flex items-center justify-between">
+                      <span>Voice / आवाज़</span>
+                      <span className="text-[10px] text-pink-300 font-medium px-2 py-0.5 rounded-full bg-pink-500/15 border border-pink-500/25">
+                        {config?.voiceName || "Kore"}
+                      </span>
+                    </div>
+                  </button>
+
+                  <button 
+                    onClick={() => {
+                      setMenuOpen(false);
                       setShowTopicModal(true);
                     }}
                     className="w-full text-left px-4 py-3 text-sm text-white/90 hover:bg-white/5 transition-colors flex items-center gap-3 border-t border-white/5"
@@ -704,6 +736,15 @@ export default function App() {
           currentTopic={config?.activeTopicOrScript || ""}
           onSave={handleUpdateTopic}
           onClose={() => setShowTopicModal(false)}
+        />
+      )}
+      {/* Voice Selection Modal */}
+      {showVoiceModal && (
+        <VoiceSelectorModal
+          assistantName={config?.assistantName}
+          currentVoice={config?.voiceName || "Kore"}
+          onSelectVoice={handleSelectVoice}
+          onClose={() => setShowVoiceModal(false)}
         />
       )}
     </div>
