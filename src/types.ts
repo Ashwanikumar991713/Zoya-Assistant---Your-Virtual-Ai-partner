@@ -3,6 +3,7 @@ export interface AppConfig {
   userName: string;
   assistantName: string;
   systemPrompt: string;
+  activeTopicOrScript?: string;
 }
 
 export type AppState = "idle" | "listening" | "processing" | "speaking" | "reconnecting";

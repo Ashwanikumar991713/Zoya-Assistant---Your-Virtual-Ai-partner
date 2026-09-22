@@ -3,10 +3,13 @@ import { motion } from 'motion/react';
 import { MicOff } from 'lucide-react';
 
 interface Props {
+  assistantName?: string;
   onClose: () => void;
 }
 
-export default function PermissionModal({ onClose }: Props) {
+export default function PermissionModal({ assistantName, onClose }: Props) {
+  const companionName = assistantName?.trim() || "Your virtual companion";
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md p-4">
       <motion.div 
@@ -22,7 +25,7 @@ export default function PermissionModal({ onClose }: Props) {
         
         <h2 className="text-2xl font-serif font-medium text-white mb-3">Microphone Blocked</h2>
         <p className="text-white/60 text-sm mb-6 leading-relaxed">
-          Your browser has blocked microphone access for this site. Zoya cannot hear you until you allow it.
+          Your browser has blocked microphone access for this site. {companionName} cannot hear you until you allow it.
         </p>
         
         <div className="bg-white/5 border border-white/10 rounded-xl p-4 text-left w-full mb-8">

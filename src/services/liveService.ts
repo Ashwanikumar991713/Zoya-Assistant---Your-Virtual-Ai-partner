@@ -244,6 +244,26 @@ export class LiveSessionManager {
 3. WEBSITES: If asked to open a website, use actionType 'open' and the website name as the query.
 4. You have the actual capability to execute these actions via the tool, so NEVER pretend you did it without calling the tool.`;
 
+    let topicContext = "";
+    if (this.config.activeTopicOrScript && this.config.activeTopicOrScript.trim()) {
+      topicContext = `
+
+[CURRENT CONVERSATIONAL FOCUS, TOPIC, OR SCRIPT]
+The user has provided the following active focus, idea, script, or conversation topic:
+"""
+${this.config.activeTopicOrScript.trim()}
+"""
+
+CRITICAL INSTRUCTIONS FOR THIS FOCUS:
+1. NATURAL HUMAN CONVERSATION: Weave these ideas, topics, or goals into your conversation naturally and fluidly, like an authentic human who has this topic or agenda in mind.
+2. DO NOT SOUND OBSESSED: Do not force this topic into every single sentence unnaturally or abruptly if the user is talking about something else. Introduce it smoothly, respond warmly to what the user says, and transition gracefully.
+3. SCRIPT & ROLEPLAY INTERPRETATION: If the provided context is a script, storyline, or bullet points:
+   - NEVER copy or recite lines word-for-word mechanically or robotically.
+   - Internalize the essence, emotions, and key points, and express them in your own natural, sweet speaking style and words.
+   - Act according to the scenario or goals outlined, adapting dynamically to the user's responses.
+4. ACTIVE MEMORY & INTENT: Treat this as your personal active memory, thoughts, or purpose for this conversation. You have your own thoughts and genuine interest regarding this topic.`;
+    }
+
     const connectConfig = {
       model: "gemini-3.8-live",
       config: {
@@ -251,7 +271,7 @@ export class LiveSessionManager {
         speechConfig: {
           voiceConfig: { prebuiltVoiceConfig: { voiceName: "Aoede" } },
         },
-        systemInstruction: baseInstruction + strictContext,
+        systemInstruction: baseInstruction + strictContext + topicContext,
         inputAudioTranscription: {},
         outputAudioTranscription: {},
         tools: [
@@ -536,6 +556,19 @@ export class LiveSessionManager {
     }
 
     this.onStateChange("idle");
+  }
+
+  updateConfig(newConfig: AppConfig) {
+    this.config = newConfig;
+    if (this.activeSession && newConfig.activeTopicOrScript?.trim()) {
+      try {
+        this.activeSession.sendRealtimeInput({
+          text: `[SYSTEM EVENT: The user has updated the active conversation topic, goal, or script to: "${newConfig.activeTopicOrScript.trim()}". Naturally transition and weave this into your upcoming thoughts in your own sweet words, without sounding repetitive or robotic, and without reciting scripts word-for-word.]`,
+        });
+      } catch (e) {
+        console.warn("Could not notify active session of topic update:", e);
+      }
+    }
   }
 
   sendText(text: string) {

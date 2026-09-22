@@ -51,10 +51,30 @@ export async function getZoyaResponse(prompt: string, history: { sender: "user" 
 2. YOUTUBE/SPOTIFY: If asked to play media on YouTube or Spotify, say something like "Playing [song] on Spotify" or "Playing [song] on YouTube".
 3. WEBSITES: If asked to open a website, say something like "Open Google" or "Opening Instagram".`;
 
+      let topicContext = "";
+      if (config.activeTopicOrScript && config.activeTopicOrScript.trim()) {
+        topicContext = `
+
+[CURRENT CONVERSATIONAL FOCUS, TOPIC, OR SCRIPT]
+The user has provided the following active focus, idea, script, or conversation topic:
+"""
+${config.activeTopicOrScript.trim()}
+"""
+
+CRITICAL INSTRUCTIONS FOR THIS FOCUS:
+1. NATURAL HUMAN CONVERSATION: Weave these ideas, topics, or goals into your conversation naturally and fluidly, like an authentic human who has this topic or agenda in mind.
+2. DO NOT SOUND OBSESSED: Do not force this topic into every single sentence unnaturally or abruptly if the user is talking about something else. Introduce it smoothly, respond warmly to what the user says, and transition gracefully.
+3. SCRIPT & ROLEPLAY INTERPRETATION: If the provided context is a script, storyline, or bullet points:
+   - NEVER copy or recite lines word-for-word mechanically or robotically.
+   - Internalize the essence, emotions, and key points, and express them in your own natural, sweet speaking style and words.
+   - Act according to the scenario or goals outlined, adapting dynamically to the user's responses.
+4. ACTIVE MEMORY & INTENT: Treat this as your personal active memory, thoughts, or purpose for this conversation. You have your own thoughts and genuine interest regarding this topic.`;
+      }
+
       chatSession = ai.chats.create({
         model: "gemini-3.1-flash-lite-preview",
         config: {
-          systemInstruction: baseInstruction + strictContext,
+          systemInstruction: baseInstruction + strictContext + topicContext,
         },
         history: formattedHistory,
       });

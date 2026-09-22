@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { Mic, MicOff, Loader2, Volume2, VolumeX, Keyboard, Send, Trash2, Video, Settings, MoreVertical, Edit3, Key, Download } from "lucide-react";
+import { Mic, MicOff, Loader2, Volume2, VolumeX, Keyboard, Send, Trash2, Video, Settings, MoreVertical, Edit3, Key, Download, ScrollText, RefreshCw } from "lucide-react";
 import { getZoyaResponse, getZoyaAudio, resetZoyaSession } from "./services/geminiService";
 import { usePWAInstall } from "./hooks/usePWAInstall";
 import { processCommand } from "./services/commandService";
@@ -7,6 +7,7 @@ import { LiveSessionManager } from "./services/liveService";
 import Visualizer from "./components/Visualizer";
 import PermissionModal from "./components/PermissionModal";
 import SetupScreen from "./components/SetupScreen";
+import TopicScriptModal from "./components/TopicScriptModal";
 import { playPCM } from "./utils/audioUtils";
 import { motion, AnimatePresence } from "motion/react";
 import { AppConfig, AppState } from "./types";
@@ -52,6 +53,12 @@ export default function App() {
     localStorage.setItem("zoya_chat_history", JSON.stringify(messages));
   }, [messages]);
 
+  useEffect(() => {
+    if (config?.assistantName) {
+      document.title = config.assistantName;
+    }
+  }, [config?.assistantName]);
+
   const [isMuted, setIsMuted] = useState(false);
   const [volume, setVolume] = useState(1.0);
   const [showVolumeSlider, setShowVolumeSlider] = useState(false);
@@ -84,11 +91,51 @@ export default function App() {
     scrollToBottom();
   }, [messages, appState]);
 
+  const [showTopicModal, setShowTopicModal] = useState(false);
+  const [updatingPWA, setUpdatingPWA] = useState(false);
+
   const handleConfigComplete = (newConfig: AppConfig) => {
     localStorage.setItem("zoya_app_config", JSON.stringify(newConfig));
     setConfig(newConfig);
     setShowSettings(false);
     resetZoyaSession();
+    if (liveSessionRef.current) {
+      liveSessionRef.current.updateConfig(newConfig);
+    }
+  };
+
+  const handleUpdateTopic = (newTopic: string) => {
+    if (!config) return;
+    const updatedConfig: AppConfig = {
+      ...config,
+      activeTopicOrScript: newTopic,
+    };
+    setConfig(updatedConfig);
+    localStorage.setItem("zoya_app_config", JSON.stringify(updatedConfig));
+    resetZoyaSession();
+    if (liveSessionRef.current) {
+      liveSessionRef.current.updateConfig(updatedConfig);
+    }
+  };
+
+  const handleForceUpdateApp = async () => {
+    setUpdatingPWA(true);
+    try {
+      if ("serviceWorker" in navigator) {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        for (const reg of registrations) {
+          await reg.unregister();
+        }
+      }
+      if ("caches" in window) {
+        const cacheNames = await caches.keys();
+        await Promise.all(cacheNames.map((name) => caches.delete(name)));
+      }
+    } catch (e) {
+      console.warn("Cache reset error:", e);
+    } finally {
+      window.location.reload();
+    }
   };
 
   const handleVideoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -243,6 +290,7 @@ export default function App() {
       )}
       {showPermissionModal && (
         <PermissionModal 
+          assistantName={config?.assistantName}
           onClose={() => setShowPermissionModal(false)} 
         />
       )}
@@ -255,7 +303,7 @@ export default function App() {
             <div>
               <h3 className="text-xl font-medium text-white mb-2">Install on iOS</h3>
               <p className="text-sm text-white/60 leading-relaxed">
-                To install ZOYA on your iPhone or iPad:<br/><br/>
+                To install {config?.assistantName || "your companion"} on your iPhone or iPad:<br/><br/>
                 1. Tap the <strong>Share</strong> button in the Safari toolbar at the bottom.<br/>
                 2. Scroll down and tap <strong>Add to Home Screen</strong>.
               </p>
@@ -278,7 +326,7 @@ export default function App() {
             <div>
               <h3 className="text-xl font-medium text-white mb-2">Install App</h3>
               <p className="text-sm text-white/60 leading-relaxed">
-                To install ZOYA on your device:<br/><br/>
+                To install {config?.assistantName || "your companion"} on your device:<br/><br/>
                 1. Tap the <strong>Browser Menu</strong> (three dots ⋮) at the top right.<br/>
                 2. Tap <strong>Install app</strong> or <strong>Add to Home Screen</strong>.
               </p>
@@ -300,6 +348,18 @@ export default function App() {
         </h1>
         
         <div className="flex items-center gap-3">
+          {/* Topic & Script Direct Button */}
+          <button
+            onClick={() => setShowTopicModal(true)}
+            className="p-3 rounded-[14px] bg-[#181A22] hover:bg-[#252836] transition-colors border border-white/5 shadow-lg relative text-white/80 hover:text-white"
+            title="Topic & Script Focus"
+          >
+            <ScrollText size={20} className={config?.activeTopicOrScript?.trim() ? "text-amber-400" : "opacity-80 text-white"} />
+            {config?.activeTopicOrScript?.trim() && (
+              <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-amber-400 shadow-sm shadow-amber-400/50" />
+            )}
+          </button>
+
           {/* Menu Dropdown */}
           <div className="relative">
             <button
@@ -344,6 +404,22 @@ export default function App() {
                     Your API Key
                   </button>
 
+                  <button 
+                    onClick={() => {
+                      setMenuOpen(false);
+                      setShowTopicModal(true);
+                    }}
+                    className="w-full text-left px-4 py-3 text-sm text-white/90 hover:bg-white/5 transition-colors flex items-center gap-3 border-t border-white/5"
+                  >
+                    <ScrollText size={16} className="text-amber-400" />
+                    <div className="flex-1 flex items-center justify-between">
+                      <span>Topic & Script</span>
+                      {config?.activeTopicOrScript?.trim() && (
+                        <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                      )}
+                    </div>
+                  </button>
+
                   {!isInstalled && (
                     <button 
                       onClick={async () => {
@@ -378,6 +454,19 @@ export default function App() {
                     <Video size={16} className="text-pink-400" />
                     {videoSrc ? "Change Video" : "Upload Video"}
                   </label>
+
+                  <button 
+                    onClick={() => {
+                      setMenuOpen(false);
+                      handleForceUpdateApp();
+                    }}
+                    disabled={updatingPWA}
+                    className="w-full text-left px-4 py-3 text-sm text-emerald-400 hover:bg-white/5 transition-colors flex items-center gap-3 border-t border-white/5"
+                    title="Force refresh to the newest version and clear mobile cache"
+                  >
+                    <RefreshCw size={16} className={updatingPWA ? "animate-spin" : ""} />
+                    <span>{updatingPWA ? "Updating..." : "Update / Refresh App"}</span>
+                  </button>
 
                   <button 
                     onClick={() => {
@@ -608,6 +697,15 @@ export default function App() {
           </div>
         </div>
       </footer>
+      {/* Topic & Script Focus Modal */}
+      {showTopicModal && (
+        <TopicScriptModal
+          assistantName={config?.assistantName}
+          currentTopic={config?.activeTopicOrScript || ""}
+          onSave={handleUpdateTopic}
+          onClose={() => setShowTopicModal(false)}
+        />
+      )}
     </div>
   );
 }

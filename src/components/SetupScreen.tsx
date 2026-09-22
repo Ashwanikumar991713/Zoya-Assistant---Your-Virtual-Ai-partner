@@ -20,7 +20,7 @@ CRITICAL RULES:
 export default function SetupScreen({ onComplete, onCancel, initialConfig }: SetupScreenProps) {
   const [apiKey, setApiKey] = useState(initialConfig?.apiKey || "");
   const [userName, setUserName] = useState(initialConfig?.userName || "Ashwani");
-  const [assistantName, setAssistantName] = useState(initialConfig?.assistantName || "Zoya");
+  const [assistantName, setAssistantName] = useState(initialConfig?.assistantName || "Companion");
   const [systemPrompt, setSystemPrompt] = useState(initialConfig?.systemPrompt || "");
   const [errorMsg, setErrorMsg] = useState("");
 
@@ -52,6 +52,7 @@ export default function SetupScreen({ onComplete, onCancel, initialConfig }: Set
       userName: userName.trim(),
       assistantName: assistantName.trim(),
       systemPrompt: finalPrompt,
+      activeTopicOrScript: initialConfig?.activeTopicOrScript,
     });
   };
 
@@ -132,7 +133,7 @@ export default function SetupScreen({ onComplete, onCancel, initialConfig }: Set
                 type="text" 
                 value={assistantName}
                 onChange={(e) => setAssistantName(e.target.value)}
-                placeholder="e.g., Zoya"
+                placeholder="e.g., Maya, Companion, Jarvis"
                 className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:border-cyan-500 transition-colors"
               />
             </div>
