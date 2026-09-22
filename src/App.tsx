@@ -77,6 +77,7 @@ export default function App() {
   const [textInput, setTextInput] = useState("");
   const [showPermissionModal, setShowPermissionModal] = useState(false);
   const [isSessionActive, setIsSessionActive] = useState(false);
+  const [isMicHearing, setIsMicHearing] = useState(false);
   const [videoSrc, setVideoSrc] = useState<string | null>(() => {
     return localStorage.getItem("zoya_video_bg") || null;
   });
@@ -231,6 +232,7 @@ export default function App() {
   const toggleListening = async () => {
     if (isSessionActive) {
       setIsSessionActive(false);
+      setIsMicHearing(false);
       if (liveSessionRef.current) {
         liveSessionRef.current.stop();
         liveSessionRef.current = null;
@@ -264,6 +266,14 @@ export default function App() {
           setTimeout(() => {
             window.open(url, "_blank");
           }, 1000);
+        };
+
+        session.onAudioLevel = (level) => {
+          if (level > 0.012) {
+            setIsMicHearing(true);
+          } else if (level < 0.005) {
+            setIsMicHearing(false);
+          }
         };
 
         await session.start();
@@ -583,8 +593,8 @@ export default function App() {
                 exit={{ opacity: 0, y: -10 }}
                 className="flex items-center gap-2 text-emerald-400 text-sm md:text-base italic bg-black/60 px-4 py-2 rounded-full backdrop-blur-md border border-emerald-500/20 shadow-lg"
               >
-                <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                Listening...
+                <div className={`w-2.5 h-2.5 rounded-full transition-all duration-200 ${isMicHearing ? "bg-emerald-300 scale-125 shadow-[0_0_12px_#34d399]" : "bg-emerald-400 animate-pulse"}`} />
+                <span>{isMicHearing ? "Hearing your voice..." : "Listening..."}</span>
               </motion.div>
             )}
             {appState === "speaking" && (

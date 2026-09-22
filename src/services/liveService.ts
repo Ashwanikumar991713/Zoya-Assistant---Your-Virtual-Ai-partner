@@ -79,6 +79,7 @@ export class LiveSessionManager {
   public onStateChange: (state: AppState) => void = () => {};
   public onMessage: (sender: "user" | "zoya", text: string) => void = () => {};
   public onCommand: (url: string) => void = () => {};
+  public onAudioLevel: (level: number) => void = () => {};
 
   private boundVisibilityHandler: () => void;
 
@@ -175,28 +176,19 @@ export class LiveSessionManager {
         this.processor.onaudioprocess = (e) => {
           if (!this.activeSession || this.isConnecting) return;
 
-          const now = Date.now();
-          // ECHO SUPPRESSION:
-          // When the companion is speaking through phone or laptop speakers, or has received audio
-          // in the last 400ms, completely mute mic streaming to Gemini Live.
-          // This prevents the assistant's own voice from being heard by the mic and triggering
-          // a self-interruption that cuts her off mid-sentence.
-          const isCompanionSpeaking = this.isPlaying || (now - this.lastAudioChunkReceivedTime < 400);
-          if (isCompanionSpeaking) {
-            return;
-          }
-
           const inputData = e.inputBuffer.getChannelData(0);
           
-          // Calculate volume energy (RMS)
+          // Calculate volume energy (RMS) for UI feedback
           let sumSquares = 0;
           for (let i = 0; i < inputData.length; i++) {
             sumSquares += inputData[i] * inputData[i];
           }
           const rms = Math.sqrt(sumSquares / inputData.length);
+          this.onAudioLevel(rms);
 
-          // Voice Activity Filter: Ignore absolute silence/faint ambient noise (RMS < 0.008)
-          if (rms < 0.008) {
+          // If companion is speaking through speakers, suppress mic streaming
+          // to prevent speaker audio from looping back and interrupting her.
+          if (this.isPlaying) {
             return;
           }
 
@@ -217,7 +209,11 @@ export class LiveSessionManager {
         };
 
         this.source.connect(this.processor);
-        this.processor.connect(this.audioContext.destination);
+        // Connect to a mute gain node so the user's mic doesn't play back through their own speakers
+        const muteGain = this.audioContext.createGain();
+        muteGain.gain.value = 0;
+        this.processor.connect(muteGain);
+        muteGain.connect(this.audioContext.destination);
       }
 
       // 3. Request WakeLock
@@ -498,15 +494,15 @@ CRITICAL INSTRUCTIONS FOR THIS FOCUS:
       source.onended = () => {
         this.activeSources.delete(source);
         if (this.activeSources.size === 0) {
-          // Keep a short 350ms buffer window so natural pauses between words/chunks
-          // do not cause the state to abruptly flicker to "listening" or leak mic echo
+          // Keep a very brief 120ms buffer so natural micro-pauses between words
+          // do not flicker state, but allow the user to speak immediately once she finishes
           if (this.speakingHangoverTimer) clearTimeout(this.speakingHangoverTimer);
           this.speakingHangoverTimer = setTimeout(() => {
             if (this.activeSources.size === 0) {
               this.isPlaying = false;
               this.onStateChange("listening");
             }
-          }, 350);
+          }, 120);
         }
       };
 
