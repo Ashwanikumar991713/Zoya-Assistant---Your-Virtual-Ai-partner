@@ -1,4 +1,4 @@
-import { GoogleGenAI, LiveServerMessage, Modality, Type } from "@google/genai";
+import { GoogleGenAI, LiveServerMessage, Modality, Type, StartSensitivity, EndSensitivity, ActivityHandling } from "@google/genai";
 import { AppConfig, AppState } from "../types";
 
 // High performance Uint8Array to base64 converter avoiding heavy GC allocation
@@ -56,6 +56,15 @@ export class LiveSessionManager {
   private playbackTimeout: any = null;
   private speakingHangoverTimer: any = null;
   private lastAudioChunkReceivedTime: number = 0;
+
+  // Voice Activity Detection & Instant Turn Taking
+  private hasSpokenInCurrentTurn: boolean = false;
+  private speechFramesCount: number = 0;
+  private lastSpeechTimestamp: number = 0;
+  private turnCommitTimer: any = null;
+  private preRollBuffer: string[] = [];
+  private noiseFloor: number = 0.006;
+  private lastUserTranscript: string = "";
 
   // Audio capture
   private audioContext: AudioContext | null = null;
@@ -171,14 +180,15 @@ export class LiveSessionManager {
 
       if (!this.source && this.mediaStream && this.audioContext) {
         this.source = this.audioContext.createMediaStreamSource(this.mediaStream);
-        this.processor = this.audioContext.createScriptProcessor(4096, 1, 1);
+        // Use 2048 buffer size to slice capture latency in half (~43ms at 48k, ~128ms at 16k)
+        this.processor = this.audioContext.createScriptProcessor(2048, 1, 1);
 
         this.processor.onaudioprocess = (e) => {
           if (!this.activeSession || this.isConnecting) return;
 
           const inputData = e.inputBuffer.getChannelData(0);
-          
-          // Calculate volume energy (RMS) for UI feedback
+
+          // 1. Calculate volume energy (RMS) for UI feedback & VAD
           let sumSquares = 0;
           for (let i = 0; i < inputData.length; i++) {
             sumSquares += inputData[i] * inputData[i];
@@ -186,25 +196,99 @@ export class LiveSessionManager {
           const rms = Math.sqrt(sumSquares / inputData.length);
           this.onAudioLevel(rms);
 
-          // If companion is speaking through speakers, suppress mic streaming
-          // to prevent speaker audio from looping back and interrupting her.
+          // 2. Adaptive noise floor tracking during silence to distinguish speech from ambient room hum/fan
+          if (!this.hasSpokenInCurrentTurn && rms < 0.025) {
+            this.noiseFloor = this.noiseFloor * 0.95 + rms * 0.05;
+          }
+          const speechThreshold = Math.max(0.012, this.noiseFloor * 2.2);
+
+          // 3. Barge-in interruption check:
+          // If companion is speaking through speakers and user starts talking clearly
           if (this.isPlaying) {
-            return;
+            if (rms > Math.max(0.035, speechThreshold * 1.8)) {
+              // Interrupted by user speaking!
+              this.stopPlayback();
+              this.hasSpokenInCurrentTurn = true;
+              this.speechFramesCount = 2;
+              this.lastSpeechTimestamp = Date.now();
+              this.onStateChange("listening");
+            } else {
+              // Ignore mic playback bleed from phone speakers
+              return;
+            }
           }
 
-          // Downsample to clean 16000Hz PCM16
+          // 4. Downsample to clean 16000Hz PCM16 & fast Base64 encode
           const pcm16 = downsampleTo16k(inputData, this.audioContext?.sampleRate || 16000);
-
-          // Fast Base64 encoding
           const uint8 = new Uint8Array(pcm16.buffer, pcm16.byteOffset, pcm16.byteLength);
           const base64Data = uint8ToBase64(uint8);
 
-          try {
-            this.activeSession.sendRealtimeInput({
-              audio: { data: base64Data, mimeType: "audio/pcm;rate=16000" },
-            });
-          } catch (err) {
-            console.warn("Audio stream send warning:", err);
+          const isSpeech = rms > speechThreshold;
+
+          if (isSpeech) {
+            this.lastSpeechTimestamp = Date.now();
+            this.speechFramesCount++;
+
+            // Cancel any pending turn commit because the user is currently speaking
+            if (this.turnCommitTimer) {
+              clearTimeout(this.turnCommitTimer);
+              this.turnCommitTimer = null;
+            }
+
+            // Once speech is sustained for at least 2 frames (~80ms), mark turn active
+            if (this.speechFramesCount >= 2) {
+              if (!this.hasSpokenInCurrentTurn) {
+                this.hasSpokenInCurrentTurn = true;
+                this.onStateChange("listening");
+
+                // Flush pre-roll buffer so the very first phoneme is not clipped
+                while (this.preRollBuffer.length > 0) {
+                  const pre = this.preRollBuffer.shift();
+                  if (pre) {
+                    try {
+                      this.activeSession.sendRealtimeInput({
+                        audio: { data: pre, mimeType: "audio/pcm;rate=16000" },
+                      });
+                    } catch {}
+                  }
+                }
+              }
+            }
+
+            // Stream user voice chunk
+            try {
+              this.activeSession.sendRealtimeInput({
+                audio: { data: base64Data, mimeType: "audio/pcm;rate=16000" },
+              });
+            } catch (err) {
+              console.warn("Audio stream send warning:", err);
+            }
+          } else {
+            // Audio is below speech threshold (silence or quiet ambient room)
+            if (this.hasSpokenInCurrentTurn) {
+              // The user was speaking and has now paused/stopped!
+              // Send trailing quiet chunk to prevent abrupt audio clipping of word endings
+              try {
+                this.activeSession.sendRealtimeInput({
+                  audio: { data: base64Data, mimeType: "audio/pcm;rate=16000" },
+                });
+              } catch {}
+
+              const silenceDuration = Date.now() - this.lastSpeechTimestamp;
+              // Trigger instant turn completion after 450ms of silence
+              if (!this.turnCommitTimer) {
+                const waitTime = Math.max(30, 450 - silenceDuration);
+                this.turnCommitTimer = setTimeout(() => {
+                  this.commitUserTurn();
+                }, waitTime);
+              }
+            } else {
+              // Idle state: keep latest 2 chunks in circular pre-roll buffer
+              this.preRollBuffer.push(base64Data);
+              if (this.preRollBuffer.length > 2) {
+                this.preRollBuffer.shift();
+              }
+            }
           }
         };
 
@@ -225,6 +309,30 @@ export class LiveSessionManager {
       console.error("Failed to start Live Session:", error);
       this.stop();
       throw error;
+    }
+  }
+
+  public commitUserTurn() {
+    if (this.turnCommitTimer) {
+      clearTimeout(this.turnCommitTimer);
+      this.turnCommitTimer = null;
+    }
+
+    if (!this.hasSpokenInCurrentTurn) return;
+    this.hasSpokenInCurrentTurn = false;
+    this.speechFramesCount = 0;
+
+    // Fast state change to processing so the UI immediately shows 'Replying...'
+    this.onStateChange("processing");
+
+    // Explicitly signal turn complete to Gemini Live so server generates response immediately
+    if (this.activeSession) {
+      try {
+        this.activeSession.sendClientContent({ turnComplete: true });
+        console.log("Committed user turn to Gemini Live successfully.");
+      } catch (err) {
+        console.warn("Could not send client content turnComplete:", err);
+      }
     }
   }
 
@@ -280,6 +388,13 @@ CRITICAL INSTRUCTIONS FOR THIS FOCUS:
 4. SINGING & RECITATION:
    - If asked to sing or recite poetry, recite the lines with melodic soulfulness and gentle emotion.`;
 
+    const rapidConversationDirective = `
+
+[LIGHTNING FAST CONVERSATIONAL CADENCE - REAL HUMAN FLOW]
+1. INSTANT RESPONSES: As soon as the user finishes their sentence, reply naturally without hesitation.
+2. CRISP & CONVERSATIONAL: Keep your spoken turns brief, engaging, and sweet (typically 1 to 3 short sentences). Real friends talk back and forth dynamically; do NOT lecture or monologue.
+3. WARM FILLERS & IMMEDIATE STARTERS: Jump straight into the conversation with authentic warm colloquial starters: "Haan ji!", "Arey bilkul!", "Sach me?", "Acha batao na", "Hmm, sahi kaha aapne".`;
+
     const voiceToUse = this.config.voiceName?.trim() || "Kore";
 
     const connectConfig = {
@@ -289,9 +404,19 @@ CRITICAL INSTRUCTIONS FOR THIS FOCUS:
         speechConfig: {
           voiceConfig: { prebuiltVoiceConfig: { voiceName: voiceToUse } },
         },
-        systemInstruction: baseInstruction + strictContext + topicContext + heartTouchingVoiceInstruction,
+        systemInstruction: baseInstruction + strictContext + topicContext + heartTouchingVoiceInstruction + rapidConversationDirective,
         inputAudioTranscription: {},
         outputAudioTranscription: {},
+        realtimeInputConfig: {
+          automaticActivityDetection: {
+            disabled: false,
+            startOfSpeechSensitivity: StartSensitivity.START_SENSITIVITY_HIGH,
+            endOfSpeechSensitivity: EndSensitivity.END_SENSITIVITY_HIGH,
+            silenceDurationMs: 450,
+            prefixPaddingMs: 80,
+          },
+          activityHandling: ActivityHandling.START_OF_ACTIVITY_INTERRUPTS,
+        },
         tools: [
           {
             functionDeclarations: [
@@ -329,22 +454,36 @@ CRITICAL INSTRUCTIONS FOR THIS FOCUS:
           this.onStateChange("listening");
         },
         onmessage: async (message: LiveServerMessage) => {
-          // Handle Audio Output
+          // 1. If server VAD detects end of speech turn, commit immediately
+          if (message.voiceActivity?.voiceActivityType === "ACTIVITY_END") {
+            if (this.hasSpokenInCurrentTurn) {
+              this.commitUserTurn();
+            }
+          }
+
+          // 2. Handle Audio Output (streaming response from companion)
           const base64Audio = message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
           if (base64Audio) {
             this.playAudioChunk(base64Audio);
           }
 
-          // Handle Interruption
+          // 3. Handle Interruption (barge-in)
           if (message.serverContent?.interrupted) {
             this.stopPlayback();
             this.onStateChange("listening");
           }
 
-          // Handle Transcriptions
-          const userText = message.serverContent?.modelTurn?.parts?.[0]?.text;
-          if (userText) {
-            this.onMessage("zoya", userText);
+          // 4. Handle Companion Transcriptions
+          const companionText = message.serverContent?.outputTranscription?.text || message.serverContent?.modelTurn?.parts?.[0]?.text;
+          if (companionText && companionText.trim()) {
+            this.onMessage("zoya", companionText.trim());
+          }
+
+          // 5. Handle User Spoken Transcription
+          const userTranscription = message.serverContent?.inputTranscription?.text;
+          if (userTranscription && userTranscription.trim() && userTranscription.trim() !== this.lastUserTranscript) {
+            this.lastUserTranscript = userTranscription.trim();
+            this.onMessage("user", this.lastUserTranscript);
           }
 
           // Handle Function Calls
@@ -536,6 +675,10 @@ CRITICAL INSTRUCTIONS FOR THIS FOCUS:
       clearTimeout(this.speakingHangoverTimer);
       this.speakingHangoverTimer = null;
     }
+    if (this.turnCommitTimer) {
+      clearTimeout(this.turnCommitTimer);
+      this.turnCommitTimer = null;
+    }
 
     if (this.playbackContext) {
       this.nextPlayTime = this.playbackContext.currentTime;
@@ -550,6 +693,12 @@ CRITICAL INSTRUCTIONS FOR THIS FOCUS:
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
+    if (this.turnCommitTimer) {
+      clearTimeout(this.turnCommitTimer);
+      this.turnCommitTimer = null;
+    }
+    this.hasSpokenInCurrentTurn = false;
+    this.speechFramesCount = 0;
 
     if (this.processor) {
       this.processor.disconnect();
