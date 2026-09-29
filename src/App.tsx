@@ -33,7 +33,14 @@ export default function App() {
   const [config, setConfig] = useState<AppConfig | null>(() => {
     try {
       const saved = localStorage.getItem("zoya_app_config");
-      return saved ? JSON.parse(saved) : null;
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.voiceName !== "Aoede") {
+          parsed.voiceName = "Kore";
+        }
+        return parsed;
+      }
+      return null;
     } catch (e) {
       console.warn("Failed to load zoya_app_config:", e);
       return null;
@@ -111,6 +118,9 @@ export default function App() {
   const [updatingPWA, setUpdatingPWA] = useState(false);
 
   const handleConfigComplete = (newConfig: AppConfig) => {
+    if (newConfig.voiceName !== "Aoede") {
+      newConfig.voiceName = "Kore";
+    }
     try {
       localStorage.setItem("zoya_app_config", JSON.stringify(newConfig));
     } catch (e) {
@@ -126,9 +136,10 @@ export default function App() {
 
   const handleSelectVoice = (newVoice: string) => {
     if (!config) return;
+    const sanitizedVoice = newVoice === "Aoede" ? "Aoede" : "Kore";
     const updatedConfig: AppConfig = {
       ...config,
-      voiceName: newVoice,
+      voiceName: sanitizedVoice,
     };
     setConfig(updatedConfig);
     try {

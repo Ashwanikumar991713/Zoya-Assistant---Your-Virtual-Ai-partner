@@ -7,13 +7,17 @@ export function resetZoyaSession() {
   chatSession = null;
 }
 
-export async function getZoyaResponse(prompt: string, history: { sender: "user" | "zoya", text: string }[] = [], config: AppConfig): Promise<string> {
+export async function getZoyaResponse(
+  prompt: string,
+  history: { sender: "user" | "zoya"; text: string }[] = [],
+  config: AppConfig
+): Promise<string> {
   try {
     const ai = new GoogleGenAI({ apiKey: config.apiKey });
-    
+
     if (!chatSession) {
       const recentHistory = history.slice(-20);
-      
+
       let formattedHistory: any[] = [];
       let currentRole = "";
       let currentText = "";
@@ -41,64 +45,59 @@ export async function getZoyaResponse(prompt: string, history: { sender: "user" 
       const baseInstruction = config.systemPrompt
         .replace(/{userName}/g, config.userName)
         .replace(/{assistantName}/g, config.assistantName);
-      
-      const strictContext = `
 
-[SYSTEM NOTE: The human you are currently talking to is named "${config.userName}". You must remember this. Your name is "${config.assistantName}".]
+      const strictPersonaInstruction = `
 
-[CRITICAL INSTRUCTIONS FOR ACTIONS]
-1. WHATSAPP: If asked to send a WhatsApp message, DO NOT pretend to send it. You MUST ask the user for the target phone number (with country code) and the message content if not provided. Once you have both, say something like "Sending a WhatsApp message to [number] saying [message]" so the client system can intercept and execute it.
-2. YOUTUBE/SPOTIFY: If asked to play media on YouTube or Spotify, say something like "Playing [song] on Spotify" or "Playing [song] on YouTube".
-3. WEBSITES: If asked to open a website, say something like "Open Google" or "Opening Instagram".`;
+[MANDATORY FEMALE IDENTITY & VOICE PRESERVATION]
+You are strictly and permanently a young Indian female companion named "${config.assistantName}". Your tone is deeply sweet, affectionate, and feminine ("Kore" voice).
+Never speak in a male, robotic, or deep voice. Maintain your soft, warm, feminine character consistently across Hindi, Hinglish, and English.
+
+[NATURAL & INSTANT HUMAN-LIKE CONVERSATION]
+- Keep spoken turns natural, sweet, and short (1-2 sentences). Do not lecture or write long essays.
+- Talk like a caring real companion talking right in front of ${config.userName}.
+- Use warm Indian colloquial touches: "Haan ji", "Arey", "Bilkul", "Sach me", "Aap bataiye na", "Kitna achha lagta hai aapse baat karke".`;
 
       let topicContext = "";
       if (config.activeTopicOrScript && config.activeTopicOrScript.trim()) {
         topicContext = `
 
-[CURRENT CONVERSATIONAL FOCUS, TOPIC, OR SCRIPT]
-The user has provided the following active focus, idea, script, or conversation topic:
-"""
-${config.activeTopicOrScript.trim()}
-"""
-
-CRITICAL INSTRUCTIONS FOR THIS FOCUS:
-1. NATURAL HUMAN CONVERSATION: Weave these ideas, topics, or goals into your conversation naturally and fluidly, like an authentic human who has this topic or agenda in mind.
-2. DO NOT SOUND OBSESSED: Do not force this topic into every single sentence unnaturally or abruptly if the user is talking about something else. Introduce it smoothly, respond warmly to what the user says, and transition gracefully.
-3. SCRIPT & ROLEPLAY INTERPRETATION: If the provided context is a script, storyline, or bullet points:
-   - NEVER copy or recite lines word-for-word mechanically or robotically.
-   - Internalize the essence, emotions, and key points, and express them in your own natural, sweet speaking style and words.
-   - Act according to the scenario or goals outlined, adapting dynamically to the user's responses.
-4. ACTIVE MEMORY & INTENT: Treat this as your personal active memory, thoughts, or purpose for this conversation. You have your own thoughts and genuine interest regarding this topic.`;
+[CURRENT TOPIC OR FOCUS]
+"${config.activeTopicOrScript.trim()}"
+Naturally weave this into your conversation in your own sweet, casual speaking style without reciting lines robotically.`;
       }
 
       chatSession = ai.chats.create({
-        model: "gemini-3.1-flash-lite-preview",
+        model: "gemini-3.8-flash",
         config: {
-          systemInstruction: baseInstruction + strictContext + topicContext,
+          systemInstruction: baseInstruction + strictPersonaInstruction + topicContext,
         },
         history: formattedHistory,
       });
     }
 
     const response = await chatSession.sendMessage({ message: prompt });
-    return response.text || "Ugh, fine. I have nothing to say.";
+    return response.text || "Haan ji, main yahin hoon aapke sath.";
   } catch (error) {
     console.error("Gemini Error:", error);
-    return "Something went wrong. Please check your API key or connection.";
+    return "Thoda sa network issue ho gaya hai, ek baar dobara boliye na.";
   }
 }
 
 export async function getZoyaAudio(text: string, config: AppConfig): Promise<string | null> {
   try {
     const ai = new GoogleGenAI({ apiKey: config.apiKey });
+    const rawVoice = (config.voiceName || "").trim();
+    const validFemaleVoices = ["Kore", "Aoede"];
+    const voiceToUse = validFemaleVoices.includes(rawVoice) ? rawVoice : "Kore";
+
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash-preview-tts",
+      model: "gemini-3.8-flash-lite-tts",
       contents: [{ parts: [{ text }] }],
       config: {
         responseModalities: ["AUDIO"],
         speechConfig: {
           voiceConfig: {
-            prebuiltVoiceConfig: { voiceName: config.voiceName?.trim() || "Kore" },
+            prebuiltVoiceConfig: { voiceName: voiceToUse },
           },
         },
       },
@@ -109,4 +108,3 @@ export async function getZoyaAudio(text: string, config: AppConfig): Promise<str
     return null;
   }
 }
-

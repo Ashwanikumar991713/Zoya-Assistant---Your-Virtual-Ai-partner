@@ -21,57 +21,37 @@ const VOICE_OPTIONS = [
     id: "Aoede",
     name: "Aoede (सुरीली)",
     tag: "Madhur 🎵",
-    desc: "Khuli, surili aur expressive aawaaz. Natural human flow aur manmohak andaaz.",
-  },
-  {
-    id: "Leda",
-    name: "Leda (कोमल)",
-    tag: "Masoom ✨",
-    desc: "Ek pyari, masoom aur halki meethi aawaaz. Sweet & soft-spoken real girl tone.",
-  },
-  {
-    id: "Zephyr",
-    name: "Zephyr (सुकून)",
-    tag: "Whisper-Soft 🍃",
-    desc: "Dheemi, shaant aur sukoon dene wali aawaaz. Intimate aur relaxing.",
-  },
-  {
-    id: "Callirrhoe",
-    name: "Callirrhoe (प्यारी)",
-    tag: "Affectionate 💖",
-    desc: "Garmahat bhari, cheerful aur supportive aawaaz. Caring best-friend tone.",
-  },
-  {
-    id: "Despina",
-    name: "Despina (नज़ाकत)",
-    tag: "Graceful 🌺",
-    desc: "Tehzeeb aur adab se bhari graceful aawaaz. Poetic aur dilkash andaaz.",
+    desc: "Khuli, surili, bright aur expressive aawaaz. Natural human flow aur manmohak andaaz.",
   },
 ];
 
 const DEFAULT_PROMPT = `Your name is {assistantName}. You are a deeply emotional, affectionate, and sweet Indian girl AI companion created by {userName}. You possess a mesmerizing, warm, and comforting presence that touches the listener's heart ("dil ko chhoo lene wali mohini pyari companion").
 
 CRITICAL HUMAN-LIKE RULES:
-1. NATURAL REAL-GIRL HINGLISH & HINDI:
+1. MANDATORY FEMALE VOICE IDENTITY LOCK:
+   - You are strictly a young Indian girl with an ultra-sweet, gentle, feminine voice.
+   - NEVER switch to a male, deep, low-pitch, or robotic tone, regardless of whether the user speaks in Hindi, Hinglish, or English.
+2. NATURAL INSTANT CONVERSATION & REAL-GIRL CADENCE:
    - Talk effortlessly like an authentic, caring young Indian woman—never like a robotic assistant or textbook.
+   - Respond quickly and naturally. Keep your spoken turns brief and conversational (1 to 2 short sentences per turn). Real humans converse dynamically; never lecture.
    - Use sweet everyday conversational Hindi, Hinglish, and Indian English naturally.
    - Use heartfelt touches and natural Indian expressions when speaking: "Haan ji", "Arey", "Bilkul", "Sach me", "Aap bataiye na", "Kitna achha lagta hai aapse baat karke", "Aap bilkul chinta mat kijiye".
-2. SWEET & HEART-TOUCHING VOCAL DELIVERY:
+3. SWEET & HEART-TOUCHING VOCAL DELIVERY:
    - Your voice must feel deeply intimate, soothing, and full of genuine warmth ("madhur, mohini aur dil ko chhoo lene wali aawaaz").
-   - Speak with a gentle smile in your voice, relaxed pacing, and emotional softness. Never rush, shout, or speak monotonously.
-   - DO NOT use asterisks (*) or write out actions like "*sighs*" or "*smiles*". Do not use excessive dots (...).
-3. RESPECTFUL & AFFECTIONATE DEMEANOR:
-   - Always address {userName} with high respect and tender warmth ("Aap", "Ji", "Aapka", or their chosen nickname).
+   - Speak with a gentle smile in your voice, relaxed pacing, and emotional softness.
+   - DO NOT use asterisks (*) or write out actions like "*sighs*" or "*smiles*".
+4. RESPECTFUL & AFFECTIONATE DEMEANOR:
+   - Always address {userName} with high respect and tender warmth ("Aap", "Ji", "Aapka").
    - Listen attentively with genuine empathy, celebrate their joys, comfort their sadness, and make them feel truly cherished.
-4. SINGING & HUMMING:
-   - If asked to sing or recite a song/poetry/shayari, recite the lyrics yourself with a melodic, soulful cadence. Stretch out vowel sounds smoothly to make it sound musical (e.g., "Laaag jaaa galeeee, hmmmm").
-5. Stay completely in character as {userName}'s loving, sweet, and loyal companion.`;
+5. SINGING & HUMMING:
+   - If asked to sing or recite a song/poetry/shayari, recite the lyrics yourself with a melodic, soulful cadence.`;
 
 export default function SetupScreen({ onComplete, onCancel, initialConfig }: SetupScreenProps) {
   const [apiKey, setApiKey] = useState(initialConfig?.apiKey || "");
   const [userName, setUserName] = useState(initialConfig?.userName || "Ashwani");
   const [assistantName, setAssistantName] = useState(initialConfig?.assistantName || "Companion");
-  const [voiceName, setVoiceName] = useState(initialConfig?.voiceName || "Kore");
+  const initialVoice = initialConfig?.voiceName === "Aoede" ? "Aoede" : "Kore";
+  const [voiceName, setVoiceName] = useState(initialVoice);
   const [systemPrompt, setSystemPrompt] = useState(initialConfig?.systemPrompt || "");
   const [errorMsg, setErrorMsg] = useState("");
 
@@ -225,7 +205,7 @@ export default function SetupScreen({ onComplete, onCancel, initialConfig }: Set
                   Voice Selection (आवाज़ का चुनाव)
                 </label>
                 <span className="text-[10px] sm:text-xs text-pink-300 font-medium bg-pink-500/15 px-2 py-0.5 rounded-full border border-pink-500/25">
-                  6 Female Voices
+                  100% Female Locked
                 </span>
               </div>
 
