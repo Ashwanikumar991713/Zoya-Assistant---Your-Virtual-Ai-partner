@@ -31,19 +31,24 @@ export default function App() {
   const [showIOSGuide, setShowIOSGuide] = useState(false);
   const [showAndroidGuide, setShowAndroidGuide] = useState(false);
   const [config, setConfig] = useState<AppConfig | null>(() => {
-    const saved = localStorage.getItem("zoya_app_config");
-    return saved ? JSON.parse(saved) : null;
+    try {
+      const saved = localStorage.getItem("zoya_app_config");
+      return saved ? JSON.parse(saved) : null;
+    } catch (e) {
+      console.warn("Failed to load zoya_app_config:", e);
+      return null;
+    }
   });
 
   const [appState, setAppState] = useState<AppState>("idle");
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
-    const saved = localStorage.getItem("zoya_chat_history");
-    if (saved) {
-      try {
+    try {
+      const saved = localStorage.getItem("zoya_chat_history");
+      if (saved) {
         return JSON.parse(saved);
-      } catch (e) {
-        console.error("Failed to parse chat history", e);
       }
+    } catch (e) {
+      console.warn("Failed to parse chat history:", e);
     }
     return [];
   });
@@ -51,7 +56,11 @@ export default function App() {
 
   useEffect(() => {
     messagesRef.current = messages;
-    localStorage.setItem("zoya_chat_history", JSON.stringify(messages));
+    try {
+      localStorage.setItem("zoya_chat_history", JSON.stringify(messages));
+    } catch (e) {
+      console.warn("Failed to save chat history:", e);
+    }
   }, [messages]);
 
   useEffect(() => {
@@ -79,7 +88,11 @@ export default function App() {
   const [isSessionActive, setIsSessionActive] = useState(false);
   const [isMicHearing, setIsMicHearing] = useState(false);
   const [videoSrc, setVideoSrc] = useState<string | null>(() => {
-    return localStorage.getItem("zoya_video_bg") || null;
+    try {
+      return localStorage.getItem("zoya_video_bg") || null;
+    } catch {
+      return null;
+    }
   });
 
   const liveSessionRef = useRef<LiveSessionManager | null>(null);
@@ -98,7 +111,11 @@ export default function App() {
   const [updatingPWA, setUpdatingPWA] = useState(false);
 
   const handleConfigComplete = (newConfig: AppConfig) => {
-    localStorage.setItem("zoya_app_config", JSON.stringify(newConfig));
+    try {
+      localStorage.setItem("zoya_app_config", JSON.stringify(newConfig));
+    } catch (e) {
+      console.warn("Failed to save config:", e);
+    }
     setConfig(newConfig);
     setShowSettings(false);
     resetZoyaSession();
@@ -114,7 +131,11 @@ export default function App() {
       voiceName: newVoice,
     };
     setConfig(updatedConfig);
-    localStorage.setItem("zoya_app_config", JSON.stringify(updatedConfig));
+    try {
+      localStorage.setItem("zoya_app_config", JSON.stringify(updatedConfig));
+    } catch (e) {
+      console.warn("Failed to save config voice:", e);
+    }
     resetZoyaSession();
     if (liveSessionRef.current) {
       liveSessionRef.current.updateConfig(updatedConfig);
@@ -128,7 +149,11 @@ export default function App() {
       activeTopicOrScript: newTopic,
     };
     setConfig(updatedConfig);
-    localStorage.setItem("zoya_app_config", JSON.stringify(updatedConfig));
+    try {
+      localStorage.setItem("zoya_app_config", JSON.stringify(updatedConfig));
+    } catch (e) {
+      console.warn("Failed to save config topic:", e);
+    }
     resetZoyaSession();
     if (liveSessionRef.current) {
       liveSessionRef.current.updateConfig(updatedConfig);
