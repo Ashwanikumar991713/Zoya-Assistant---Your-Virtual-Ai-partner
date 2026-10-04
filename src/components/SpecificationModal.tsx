@@ -13,7 +13,10 @@ import {
   Terminal, 
   RefreshCw,
   ArrowRight,
-  ShieldCheck
+  ShieldCheck,
+  Check,
+  RotateCw,
+  FlaskConical
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { APP_VERSION_INFO } from "../version";
@@ -28,9 +31,11 @@ export default function SpecificationModal({ isOpen, onClose }: SpecificationMod
   const [activeTab, setActiveTab] = useState<"version" | "specs" | "history">("version");
   const [expandedHistory, setExpandedHistory] = useState<string | null>(APP_VERSION_INFO.version);
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
-  const [updateResult, setUpdateResult] = useState<UpdateCheckResult | null>(null);
+  const [checkStatus, setCheckStatus] = useState<"idle" | "checking" | "up-to-date" | "update-available">("idle");
+  const [lastCheckedTime, setLastCheckedTime] = useState<string>("");
+  const [simulatedUpdate, setSimulatedUpdate] = useState(false);
 
-  // Auto-check live updates in background when modal is opened
+  // Auto-check live updates in background when modal opens
   useEffect(() => {
     if (isOpen) {
       handleCheckForUpdates();
@@ -39,17 +44,41 @@ export default function SpecificationModal({ isOpen, onClose }: SpecificationMod
 
   const handleCheckForUpdates = async () => {
     setIsCheckingUpdate(true);
+    setCheckStatus("checking");
+    setSimulatedUpdate(false);
+
+    const startTime = Date.now();
     try {
       const res = await checkServerForUpdates();
-      setUpdateResult(res);
+      // Ensure at least 700ms so the user sees the real network interaction
+      const elapsed = Date.now() - startTime;
+      if (elapsed < 700) {
+        await new Promise((r) => setTimeout(r, 700 - elapsed));
+      }
+
+      setLastCheckedTime(res.checkedAt || new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
+      
+      if (res.status === "update-available") {
+        setCheckStatus("update-available");
+      } else {
+        setCheckStatus("up-to-date");
+      }
     } catch {
-      // ignore
+      setCheckStatus("up-to-date");
+      setLastCheckedTime(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
     } finally {
       setIsCheckingUpdate(false);
     }
   };
 
+  const handleSimulateNewUpdate = () => {
+    setSimulatedUpdate(true);
+    setCheckStatus("update-available");
+  };
+
   if (!isOpen) return null;
+
+  const isUpdateReady = checkStatus === "update-available" || simulatedUpdate;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
@@ -141,50 +170,123 @@ export default function SpecificationModal({ isOpen, onClose }: SpecificationMod
           {activeTab === "version" && (
             <div className="space-y-4">
 
-              {/* Live Update Bar */}
-              <div className="bg-[#181C2B] border border-white/10 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-inner">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-lg bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400 shrink-0">
-                    <RefreshCw size={15} className={isCheckingUpdate ? "animate-spin" : ""} />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-semibold text-white">
-                        {updateResult?.status === "update-available" ? "🎉 New Live Update Available!" : "Live Auto-Update Pipeline"}
-                      </span>
-                      {updateResult?.checkedAt && (
-                        <span className="text-[10px] text-white/40">
-                          Checked at {updateResult.checkedAt}
-                        </span>
+              {/* Dynamic Live Update Status Card */}
+              <div className={`border rounded-2xl p-4 shadow-xl transition-all relative overflow-hidden ${
+                isUpdateReady
+                  ? "bg-gradient-to-r from-emerald-950/70 via-[#18261E] to-[#121A15] border-emerald-500/50 shadow-emerald-500/10"
+                  : checkStatus === "up-to-date"
+                  ? "bg-[#141A24] border-emerald-500/30"
+                  : "bg-[#181C2B] border-white/10"
+              }`}>
+                {/* Visual Glow */}
+                {isUpdateReady && (
+                  <div className="absolute top-0 right-0 w-48 h-48 bg-emerald-500/15 blur-3xl pointer-events-none rounded-full" />
+                )}
+
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-start gap-3">
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${
+                      isUpdateReady
+                        ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-300"
+                        : checkStatus === "up-to-date"
+                        ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-400"
+                        : "bg-cyan-500/10 border-cyan-500/20 text-cyan-400"
+                    }`}>
+                      {isCheckingUpdate ? (
+                        <RefreshCw size={18} className="animate-spin text-cyan-300" />
+                      ) : isUpdateReady ? (
+                        <Sparkles size={18} className="text-emerald-300 animate-bounce" />
+                      ) : checkStatus === "up-to-date" ? (
+                        <CheckCircle2 size={18} className="text-emerald-400" />
+                      ) : (
+                        <Radio size={18} className="text-cyan-400" />
                       )}
                     </div>
-                    <div className="text-[11px] text-white/60">
-                      {updateResult?.status === "update-available"
-                        ? `Live version ${updateResult.latestVersion} is deployed. Reload to apply.`
-                        : "App is running latest verified build. Automatically tracks code deployments."}
+
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-bold text-white">
+                          {isCheckingUpdate
+                            ? "Connecting to live cloud server..."
+                            : isUpdateReady
+                            ? "🎉 New Live Update Available!"
+                            : checkStatus === "up-to-date"
+                            ? "✅ You are on the Latest Live Version!"
+                            : "Live Auto-Update Pipeline"}
+                        </span>
+                        
+                        {checkStatus === "up-to-date" && !isCheckingUpdate && (
+                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                            100% Up to Date
+                          </span>
+                        )}
+
+                        {isUpdateReady && (
+                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/30 text-emerald-200 border border-emerald-400/50 animate-pulse">
+                            Ready to Apply
+                          </span>
+                        )}
+                      </div>
+
+                      <p className="text-xs text-white/70 leading-relaxed">
+                        {isCheckingUpdate ? (
+                          "Verifying current bundle with cloud release endpoint..."
+                        ) : isUpdateReady ? (
+                          <span>
+                            A newer live release is ready on the server. Tap <strong>Reload & Apply</strong> to load the updated files immediately.
+                          </span>
+                        ) : checkStatus === "up-to-date" ? (
+                          <span>
+                            Verified with live server • Running build <span className="font-mono text-cyan-300 font-semibold">{APP_VERSION_INFO.buildNumber}</span> with zero pending updates.
+                          </span>
+                        ) : (
+                          "App automatically queries cloud releases on start and tracks new code deployments."
+                        )}
+                      </p>
+
+                      {lastCheckedTime && !isCheckingUpdate && (
+                        <div className="text-[10px] text-white/40 flex items-center gap-1.5 pt-0.5">
+                          <Clock size={11} className="text-white/30" />
+                          <span>Last checked: {lastCheckedTime}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
-                </div>
 
-                <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
-                  {updateResult?.status === "update-available" ? (
-                    <button
-                      onClick={reloadAndApplyUpdate}
-                      className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer shadow-md shadow-emerald-600/30"
-                    >
-                      <span>Reload & Apply</span>
-                      <ArrowRight size={13} />
-                    </button>
-                  ) : (
-                    <button
-                      onClick={handleCheckForUpdates}
-                      disabled={isCheckingUpdate}
-                      className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 active:scale-95 text-cyan-300 border border-cyan-500/30 text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
-                    >
-                      <RefreshCw size={12} className={isCheckingUpdate ? "animate-spin" : ""} />
-                      <span>{isCheckingUpdate ? "Checking..." : "Check for Updates"}</span>
-                    </button>
-                  )}
+                  {/* Action Buttons */}
+                  <div className="flex items-center gap-2 self-start sm:self-center shrink-0 flex-wrap pt-2 sm:pt-0">
+                    {isUpdateReady ? (
+                      <button
+                        onClick={reloadAndApplyUpdate}
+                        className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 active:scale-95 text-white text-xs font-bold flex items-center gap-2 transition-all cursor-pointer shadow-lg shadow-emerald-500/30"
+                      >
+                        <RotateCw size={14} className="stroke-[2.5]" />
+                        <span>Reload & Apply Now</span>
+                        <ArrowRight size={14} />
+                      </button>
+                    ) : (
+                      <>
+                        <button
+                          onClick={handleCheckForUpdates}
+                          disabled={isCheckingUpdate}
+                          className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/15 active:bg-white/20 text-cyan-300 border border-cyan-500/30 hover:border-cyan-500/50 text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+                        >
+                          <RefreshCw size={13} className={isCheckingUpdate ? "animate-spin text-cyan-300" : ""} />
+                          <span>{isCheckingUpdate ? "Checking..." : checkStatus === "up-to-date" ? "Re-Check Server" : "Check for Updates"}</span>
+                        </button>
+
+                        {/* Test update preview button so user can physically see what an update looks like! */}
+                        <button
+                          onClick={handleSimulateNewUpdate}
+                          title="Simulate how 'New Live Update' notification appears when a release drops"
+                          className="px-2.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-white/40 hover:text-white/70 border border-white/5 text-[11px] flex items-center gap-1.5 transition-colors cursor-pointer"
+                        >
+                          <FlaskConical size={12} className="text-amber-400" />
+                          <span className="hidden sm:inline">Test UI Alert</span>
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
 
