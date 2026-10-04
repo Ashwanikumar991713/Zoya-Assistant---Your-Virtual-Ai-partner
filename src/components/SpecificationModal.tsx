@@ -265,26 +265,14 @@ export default function SpecificationModal({ isOpen, onClose }: SpecificationMod
                         <ArrowRight size={14} />
                       </button>
                     ) : (
-                      <>
-                        <button
-                          onClick={handleCheckForUpdates}
-                          disabled={isCheckingUpdate}
-                          className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/15 active:bg-white/20 text-cyan-300 border border-cyan-500/30 hover:border-cyan-500/50 text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50"
-                        >
-                          <RefreshCw size={13} className={isCheckingUpdate ? "animate-spin text-cyan-300" : ""} />
-                          <span>{isCheckingUpdate ? "Checking..." : checkStatus === "up-to-date" ? "Re-Check Server" : "Check for Updates"}</span>
-                        </button>
-
-                        {/* Test update preview button so user can physically see what an update looks like! */}
-                        <button
-                          onClick={handleSimulateNewUpdate}
-                          title="Simulate how 'New Live Update' notification appears when a release drops"
-                          className="px-2.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-white/40 hover:text-white/70 border border-white/5 text-[11px] flex items-center gap-1.5 transition-colors cursor-pointer"
-                        >
-                          <FlaskConical size={12} className="text-amber-400" />
-                          <span className="hidden sm:inline">Test UI Alert</span>
-                        </button>
-                      </>
+                      <button
+                        onClick={handleCheckForUpdates}
+                        disabled={isCheckingUpdate}
+                        className="px-4 py-2 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 active:scale-95 text-cyan-300 border border-cyan-500/30 hover:border-cyan-500/50 text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50 shadow-sm"
+                      >
+                        <RefreshCw size={13} className={isCheckingUpdate ? "animate-spin text-cyan-300" : ""} />
+                        <span>{isCheckingUpdate ? "Checking..." : "Check for Updates"}</span>
+                      </button>
                     )}
                   </div>
                 </div>

@@ -41,46 +41,40 @@ export interface VersionInfo {
 }
 
 export const APP_VERSION_INFO: VersionInfo = {
-  "version": "v2.6.1",
-  "buildNumber": "2026.10.04-5e420d66",
-  "commitHash": "5e420d66",
-  "buildTimestamp": "2026-10-04T18:19:00.694Z",
-  "lastUpdatedDate": "October 4, 2026",
-  "lastUpdatedTime": "11:25 PM IST",
-  "releaseTitle": "Clean Minimal Header & Automated Release Pipeline",
+  "version": "v2.7.0",
+  "buildNumber": "2026.10.04.1-42706153",
+  "commitHash": "42706153",
+  "buildTimestamp": "2026-10-04T18:36:39.934Z",
+  "lastUpdatedDate": "October 5, 2026",
+  "lastUpdatedTime": "12:06 AM IST",
+  "releaseTitle": "Automated Semantic Versioning & Live Synchronization Engine",
   "badge": "Latest Live 🚀",
   "channel": "Production Release",
   "environment": "Cloud Production (Live)",
   "whatsNew": [
     {
-      "title": "Clean Minimal Main Screen (मेन स्क्रीन से वर्ज़न हटाया)",
-      "description": "मेन स्क्रीन हेडर से वर्ज़न बटन को हटा दिया गया है ताकि इंटरफेस एकम क्लीन, प्रीमियम और डिस्ट्रैक्शन-फ्री दिखे। अब यह केवल सेटिंग्स > Specification में व्यवस्थित है।",
-      "icon": "✨",
-      "tag": "UI/UX"
+      "title": "Automated Semantic Versioning (ऑटो-वर्ज़न सिस्टम)",
+      "description": "कोड में नए बदलाव इंटरनेट पर डिप्लॉय होते ही सिस्टम स्वतः वर्ज़न को इंक्रीमेंट करता है। मैन्युअल नंबरिंग की ज़रूरत खत्म।",
+      "icon": "🚀",
+      "tag": "Auto-Build"
     },
     {
-      "title": "Automated Build & Versioning Pipeline (ऑटोमेटेड वर्ज़न सिस्टम)",
-      "description": "मैनुअल एडिटिंग की जगह ऑटोमेटेड रिलीज़ पाइपलाइन तैयार की गई है। जैसे ही नया कोड इंटरनेट पर लाइव होता है, बिल्ड हैश, टाइमस्टैम्प और चेंजलॉग स्वतः सिंक हो जाते हैं।",
-      "icon": "⚙️",
-      "tag": "DevOps"
-    },
-    {
-      "title": "Live Update Checker (लाइव अपडेट चेकर)",
-      "description": "Specification सेक्शन में 'Check for Live Updates' बटन जोड़ा गया है। यूजर एक क्लिक में सर्वर से लेटेस्ट अपडेट चेक कर सकते हैं और ऐप रीफ़्रेश कर सकते हैं।",
+      "title": "Standardized Update Button (Check for Updates)",
+      "description": "कन्फ्यूजिंग 'Re-Check Server' को हटाकर स्टैंडर्ड 'Check for Updates' बटन लगाया गया है।",
       "icon": "🔄",
-      "tag": "Feature"
+      "tag": "UX"
     },
     {
-      "title": "Isolated Personalised Settings (शुद्ध पर्सनलाइज़्ड सेटिंग्स)",
-      "description": "पर्सनलाइज़्ड सेटिंग्स पेज को टेक्निकल वर्ज़न डिटेल्स से पूरी तरह मुक्त रखा गया है, ताकि पर्सनल प्रेफरेंस सेट करना आसान रहे।",
-      "icon": "🎯",
-      "tag": "Architecture"
+      "title": "Clean Minimal Screen (क्लीन मेन स्क्रीन)",
+      "description": "मेन स्क्रीन बिना किसी अनावश्‍यक वर्ज़न बैज के पूरी तरह क्लीन और डिस्ट्रैक्शन-फ्री है।",
+      "icon": "✨",
+      "tag": "Design"
     },
     {
-      "title": "Smart Background Video Sync (स्मार्ट वीडियो सिंक)",
-      "description": "अपलोड की गई बैकग्राउंड वीडियो सिर्फ तब चलती है जब असिस्टेंट से बातचीत शुरू हो। सेशन बंद होते ही वीडियो स्वतः पॉज़/स्टॉप हो जाती है।",
-      "icon": "🎥",
-      "tag": "Media"
+      "title": "Instant Live Sync & Reload (तत्काल अपडेट लागू)",
+      "description": "सर्वर पर नया वर्ज़न मिलते ही 'Reload & Apply' से ऐप तुरंत नए कोड के साथ ताज़ा हो जाता है।",
+      "icon": "⚡",
+      "tag": "Sync"
     }
   ],
   "specifications": [
@@ -123,16 +117,16 @@ export const APP_VERSION_INFO: VersionInfo = {
   ],
   "versionHistory": [
     {
-      "version": "v2.6.1",
-      "build": "2026.10.04.3-rel",
-      "date": "October 4, 2026",
-      "time": "11:25 PM IST",
-      "title": "Clean Minimal Header & Automated Release Pipeline",
+      "version": "v2.7.0",
+      "build": "2026.10.04.1-42706153",
+      "date": "October 5, 2026",
+      "time": "12:06 AM IST",
+      "title": "Automated Semantic Versioning & Live Synchronization Engine",
       "changes": [
-        "Removed intrusive version pill from header above topic button",
-        "Created automated build-meta generator script and Vite integration",
-        "Added live update polling and manual check-for-updates button in Specification modal",
-        "Updated semantic version to v2.6.1 with automatic timestamping and build hash"
+        "Engineered automated semantic version bumper on code change",
+        "Standardized UI button strictly to 'Check for Updates'",
+        "Integrated deterministic content-hash build pipeline",
+        "Fixed hash cyclic dependency for stable releases"
       ]
     },
     {
@@ -167,8 +161,7 @@ export const APP_VERSION_INFO: VersionInfo = {
       "title": "Female Voice Safeguard & Activity Detection Tuning",
       "changes": [
         "Voice sanitization and persona enforcement",
-        "Activity Handling tuning with 250ms VAD trigger",
-        "ErrorBoundary stability improvements"
+        "Activity Handling tuning with 250ms VAD trigger"
       ]
     },
     {
@@ -179,8 +172,7 @@ export const APP_VERSION_INFO: VersionInfo = {
       "title": "Gemini Live API Bidirectional Audio & Custom Video Backgrounds",
       "changes": [
         "Integration of Gemini 3.8 Live API WebSocket",
-        "Custom video wallpaper upload and loop canvas",
-        "Progressive Web App installation capabilities"
+        "Custom video wallpaper upload and loop canvas"
       ]
     }
   ]
