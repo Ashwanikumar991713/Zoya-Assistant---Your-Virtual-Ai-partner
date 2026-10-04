@@ -1,3 +1,4 @@
+import { useState, useEffect, useCallback } from "react";
 import { APP_VERSION_INFO, VersionInfo } from "../version";
 
 export interface UpdateCheckResult {
@@ -72,7 +73,6 @@ export async function checkServerForUpdates(): Promise<UpdateCheckResult> {
 
 export function reloadAndApplyUpdate() {
   try {
-    // Unregister any stale caches if available
     if ("caches" in window) {
       caches.keys().then((keys) => {
         keys.forEach((key) => caches.delete(key));
@@ -83,4 +83,67 @@ export function reloadAndApplyUpdate() {
   }
   // Hard reload
   window.location.reload();
+}
+
+/**
+ * Global hook to monitor background updates, trigger red dot notifications,
+ * and keep the app synchronized with live cloud deployments.
+ */
+export function useAppUpdate() {
+  const [isUpdateAvailable, setIsUpdateAvailable] = useState<boolean>(false);
+  const [latestVersion, setLatestVersion] = useState<string | null>(null);
+  const [latestBuild, setLatestBuild] = useState<string | null>(null);
+  const [latestMeta, setLatestMeta] = useState<VersionInfo | null>(null);
+  const [isChecking, setIsChecking] = useState<boolean>(false);
+  const [lastCheckedAt, setLastCheckedAt] = useState<string>("");
+
+  const checkForUpdates = useCallback(async () => {
+    setIsChecking(true);
+    try {
+      const res = await checkServerForUpdates();
+      setLastCheckedAt(res.checkedAt || "");
+      if (res.status === "update-available") {
+        setIsUpdateAvailable(true);
+        setLatestVersion(res.latestVersion || null);
+        setLatestBuild(res.latestBuild || null);
+        setLatestMeta(res.latestMeta || null);
+      } else {
+        setIsUpdateAvailable(false);
+      }
+      return res;
+    } catch {
+      // ignore
+    } finally {
+      setIsChecking(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    // Check immediately on load
+    checkForUpdates();
+
+    // Check periodically every 45 seconds in background
+    const interval = setInterval(checkForUpdates, 45000);
+
+    // Check when user switches back to window/tab
+    const onFocus = () => checkForUpdates();
+    window.addEventListener("focus", onFocus);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [checkForUpdates]);
+
+  return {
+    isUpdateAvailable,
+    setIsUpdateAvailable,
+    latestVersion,
+    latestBuild,
+    latestMeta,
+    isChecking,
+    lastCheckedAt,
+    checkForUpdates,
+    reloadAndApplyUpdate
+  };
 }

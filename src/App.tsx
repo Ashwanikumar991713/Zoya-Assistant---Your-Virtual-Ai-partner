@@ -14,6 +14,7 @@ import { playPCM } from "./utils/audioUtils";
 import { motion, AnimatePresence } from "motion/react";
 import { AppConfig, AppState } from "./types";
 import { APP_VERSION_INFO } from "./version";
+import { useAppUpdate } from "./services/updateService";
 
 interface ChatMessage {
   id: string;
@@ -84,6 +85,9 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [showSpecsModal, setShowSpecsModal] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+
+  // Live cloud update notification hook
+  const updateInfo = useAppUpdate();
 
   useEffect(() => {
     if (liveSessionRef.current) {
@@ -381,7 +385,9 @@ export default function App() {
       )}
       <SpecificationModal 
         isOpen={showSpecsModal} 
-        onClose={() => setShowSpecsModal(false)} 
+        onClose={() => setShowSpecsModal(false)}
+        isUpdateAvailable={updateInfo.isUpdateAvailable}
+        latestVersion={updateInfo.latestVersion}
       />
       {showPermissionModal && (
         <PermissionModal 
@@ -462,10 +468,18 @@ export default function App() {
                 e.stopPropagation();
                 setMenuOpen(!menuOpen);
               }}
-              className="p-3 rounded-[14px] bg-[#181A22] hover:bg-[#252836] transition-colors border border-white/5 shadow-lg"
-              title="Settings"
+              className="p-3 rounded-[14px] bg-[#181A22] hover:bg-[#252836] transition-colors border border-white/5 shadow-lg relative cursor-pointer"
+              title={updateInfo.isUpdateAvailable ? "Settings (New Update Available!)" : "Settings"}
             >
               <Settings size={20} className="opacity-80 text-white" />
+              
+              {/* Red Notification Dot for New Update */}
+              {updateInfo.isUpdateAvailable && (
+                <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5" title="New update available!">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-500 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-rose-600 border-2 border-[#12141F]"></span>
+                </span>
+              )}
             </button>
 
             <AnimatePresence>
@@ -475,7 +489,7 @@ export default function App() {
                   animate={{ opacity: 1, scale: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.95, y: -10 }}
                   transition={{ duration: 0.15 }}
-                  className="absolute right-0 top-full mt-2 w-48 bg-[#181A22] border border-white/10 rounded-xl shadow-2xl py-1 z-50 overflow-hidden"
+                  className="absolute right-0 top-full mt-2 w-52 bg-[#181A22] border border-white/10 rounded-xl shadow-2xl py-1 z-50 overflow-hidden"
                   onClick={(e) => e.stopPropagation()}
                 >
                   <button 
@@ -486,12 +500,28 @@ export default function App() {
                     className="w-full text-left px-4 py-3 text-sm text-cyan-300 hover:bg-white/5 transition-colors flex items-center justify-between border-b border-white/5 cursor-pointer"
                   >
                     <div className="flex items-center gap-2.5">
-                      <Cpu size={16} className="text-cyan-400" />
+                      <div className="relative">
+                        <Cpu size={16} className="text-cyan-400" />
+                        {/* Red Dot on Specification Icon */}
+                        {updateInfo.isUpdateAvailable && (
+                          <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-rose-500 ring-2 ring-[#181A22] animate-pulse" />
+                        )}
+                      </div>
                       <span>Specification</span>
                     </div>
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-semibold">
-                      {APP_VERSION_INFO.version}
-                    </span>
+
+                    <div className="flex items-center gap-1.5">
+                      {updateInfo.isUpdateAvailable ? (
+                        <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-500/25 text-rose-300 border border-rose-500/40 shadow-sm animate-pulse">
+                          <span className="w-1.5 h-1.5 rounded-full bg-rose-400"></span>
+                          NEW
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-semibold">
+                          {APP_VERSION_INFO.version}
+                        </span>
+                      )}
+                    </div>
                   </button>
 
                   <button 

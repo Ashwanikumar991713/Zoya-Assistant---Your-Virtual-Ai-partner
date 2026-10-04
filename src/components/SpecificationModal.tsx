@@ -25,22 +25,42 @@ import { checkServerForUpdates, reloadAndApplyUpdate, UpdateCheckResult } from "
 interface SpecificationModalProps {
   isOpen: boolean;
   onClose: () => void;
+  isUpdateAvailable?: boolean;
+  latestVersion?: string | null;
 }
 
-export default function SpecificationModal({ isOpen, onClose }: SpecificationModalProps) {
+export default function SpecificationModal({ 
+  isOpen, 
+  onClose,
+  isUpdateAvailable = false,
+  latestVersion = null
+}: SpecificationModalProps) {
   const [activeTab, setActiveTab] = useState<"version" | "specs" | "history">("version");
   const [expandedHistory, setExpandedHistory] = useState<string | null>(APP_VERSION_INFO.version);
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
-  const [checkStatus, setCheckStatus] = useState<"idle" | "checking" | "up-to-date" | "update-available">("idle");
+  const [checkStatus, setCheckStatus] = useState<"idle" | "checking" | "up-to-date" | "update-available">(
+    isUpdateAvailable ? "update-available" : "idle"
+  );
   const [lastCheckedTime, setLastCheckedTime] = useState<string>("");
   const [simulatedUpdate, setSimulatedUpdate] = useState(false);
 
-  // Auto-check live updates in background when modal opens
+  // Sync with prop when update status changes
+  useEffect(() => {
+    if (isUpdateAvailable) {
+      setCheckStatus("update-available");
+    }
+  }, [isUpdateAvailable]);
+
+  // Auto-check live updates in background when modal opens if not already detected
   useEffect(() => {
     if (isOpen) {
-      handleCheckForUpdates();
+      if (isUpdateAvailable) {
+        setCheckStatus("update-available");
+      } else {
+        handleCheckForUpdates();
+      }
     }
-  }, [isOpen]);
+  }, [isOpen, isUpdateAvailable]);
 
   const handleCheckForUpdates = async () => {
     setIsCheckingUpdate(true);
