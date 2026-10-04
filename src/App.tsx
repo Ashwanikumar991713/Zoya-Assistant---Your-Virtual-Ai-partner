@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { Mic, MicOff, Loader2, Volume2, VolumeX, Keyboard, Send, Trash2, Video, Settings, MoreVertical, Edit3, Key, Download, ScrollText, RefreshCw } from "lucide-react";
+import { Mic, MicOff, Loader2, Volume2, VolumeX, Keyboard, Send, Trash2, Video, Settings, MoreVertical, Edit3, Key, Download, ScrollText, RefreshCw, Sparkles } from "lucide-react";
 import { getZoyaResponse, getZoyaAudio, resetZoyaSession } from "./services/geminiService";
 import { usePWAInstall } from "./hooks/usePWAInstall";
 import { processCommand } from "./services/commandService";
@@ -12,6 +12,7 @@ import VoiceSelectorModal from "./components/VoiceSelectorModal";
 import { playPCM } from "./utils/audioUtils";
 import { motion, AnimatePresence } from "motion/react";
 import { AppConfig, AppState } from "./types";
+import { APP_VERSION_INFO } from "./version";
 
 interface ChatMessage {
   id: string;
@@ -104,6 +105,32 @@ export default function App() {
 
   const liveSessionRef = useRef<LiveSessionManager | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const bgVideoRef = useRef<HTMLVideoElement>(null);
+  const mainVideoRef = useRef<HTMLVideoElement>(null);
+
+  // Synchronize video background with assistant session:
+  // The video only plays when the assistant is active (listening/speaking/processing).
+  // When idle or ended, it automatically pauses and resets to start frame.
+  useEffect(() => {
+    const isPlayingSession = isSessionActive && appState !== "idle";
+
+    if (bgVideoRef.current) {
+      if (isPlayingSession) {
+        bgVideoRef.current.play().catch(() => {});
+      } else {
+        bgVideoRef.current.pause();
+        bgVideoRef.current.currentTime = 0;
+      }
+    }
+    if (mainVideoRef.current) {
+      if (isPlayingSession) {
+        mainVideoRef.current.play().catch(() => {});
+      } else {
+        mainVideoRef.current.pause();
+        mainVideoRef.current.currentTime = 0;
+      }
+    }
+  }, [isSessionActive, appState, videoSrc]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -450,6 +477,22 @@ export default function App() {
                       setMenuOpen(false);
                       setShowSettings(true);
                     }}
+                    className="w-full text-left px-4 py-3 text-sm text-cyan-300 hover:bg-white/5 transition-colors flex items-center justify-between border-b border-white/5"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Sparkles size={15} className="text-cyan-400" />
+                      <span>Version & Updates</span>
+                    </div>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-semibold">
+                      {APP_VERSION_INFO.version}
+                    </span>
+                  </button>
+
+                  <button 
+                    onClick={() => {
+                      setMenuOpen(false);
+                      setShowSettings(true);
+                    }}
                     className="w-full text-left px-4 py-3 text-sm text-white/90 hover:bg-white/5 transition-colors flex items-center gap-3"
                   >
                     <Edit3 size={16} className="text-orange-400" />
@@ -586,8 +629,8 @@ export default function App() {
         <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden bg-black flex items-center justify-center">
           {/* Blurred background layer for aspect ratio fill */}
           <video 
+            ref={bgVideoRef}
             src={videoSrc}
-            autoPlay
             loop
             muted={true}
             playsInline
@@ -595,8 +638,8 @@ export default function App() {
           />
           {/* Main video layer contained */}
           <video 
+            ref={mainVideoRef}
             src={videoSrc}
-            autoPlay
             loop
             muted={true}
             playsInline
