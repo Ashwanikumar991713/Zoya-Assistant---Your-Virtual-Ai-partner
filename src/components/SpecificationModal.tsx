@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { 
   Cpu, 
   Sparkles, 
@@ -9,15 +9,15 @@ import {
   ChevronDown, 
   ChevronUp, 
   CheckCircle2, 
-  Layers, 
   Radio, 
   Terminal, 
-  Volume2, 
-  Zap,
-  Film
+  RefreshCw,
+  ArrowRight,
+  ShieldCheck
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { APP_VERSION_INFO } from "../version";
+import { checkServerForUpdates, reloadAndApplyUpdate, UpdateCheckResult } from "../services/updateService";
 
 interface SpecificationModalProps {
   isOpen: boolean;
@@ -27,6 +27,27 @@ interface SpecificationModalProps {
 export default function SpecificationModal({ isOpen, onClose }: SpecificationModalProps) {
   const [activeTab, setActiveTab] = useState<"version" | "specs" | "history">("version");
   const [expandedHistory, setExpandedHistory] = useState<string | null>(APP_VERSION_INFO.version);
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+  const [updateResult, setUpdateResult] = useState<UpdateCheckResult | null>(null);
+
+  // Auto-check live updates in background when modal is opened
+  useEffect(() => {
+    if (isOpen) {
+      handleCheckForUpdates();
+    }
+  }, [isOpen]);
+
+  const handleCheckForUpdates = async () => {
+    setIsCheckingUpdate(true);
+    try {
+      const res = await checkServerForUpdates();
+      setUpdateResult(res);
+    } catch {
+      // ignore
+    } finally {
+      setIsCheckingUpdate(false);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -60,7 +81,7 @@ export default function SpecificationModal({ isOpen, onClose }: SpecificationMod
                 </span>
               </div>
               <p className="text-[11px] text-white/50">
-                सिस्टम विनिर्देश, लाइव वर्ज़न स्थिति एवं अपडेट इतिहास
+                सिस्टम विनिर्देश, ऑटोमेटेड वर्ज़न पाइपलाइन एवं अपडेट रिकॉर्ड
               </p>
             </div>
           </div>
@@ -119,6 +140,54 @@ export default function SpecificationModal({ isOpen, onClose }: SpecificationMod
           {/* TAB 1: VERSION & WHAT'S NEW */}
           {activeTab === "version" && (
             <div className="space-y-4">
+
+              {/* Live Update Bar */}
+              <div className="bg-[#181C2B] border border-white/10 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-inner">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400 shrink-0">
+                    <RefreshCw size={15} className={isCheckingUpdate ? "animate-spin" : ""} />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold text-white">
+                        {updateResult?.status === "update-available" ? "🎉 New Live Update Available!" : "Live Auto-Update Pipeline"}
+                      </span>
+                      {updateResult?.checkedAt && (
+                        <span className="text-[10px] text-white/40">
+                          Checked at {updateResult.checkedAt}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[11px] text-white/60">
+                      {updateResult?.status === "update-available"
+                        ? `Live version ${updateResult.latestVersion} is deployed. Reload to apply.`
+                        : "App is running latest verified build. Automatically tracks code deployments."}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+                  {updateResult?.status === "update-available" ? (
+                    <button
+                      onClick={reloadAndApplyUpdate}
+                      className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer shadow-md shadow-emerald-600/30"
+                    >
+                      <span>Reload & Apply</span>
+                      <ArrowRight size={13} />
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleCheckForUpdates}
+                      disabled={isCheckingUpdate}
+                      className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 active:scale-95 text-cyan-300 border border-cyan-500/30 text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                    >
+                      <RefreshCw size={12} className={isCheckingUpdate ? "animate-spin" : ""} />
+                      <span>{isCheckingUpdate ? "Checking..." : "Check for Updates"}</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
               {/* Primary Release Hero Card */}
               <div className="bg-gradient-to-br from-[#191D2E] via-[#141724] to-[#0F111B] border border-cyan-500/30 rounded-2xl p-4 sm:p-5 shadow-xl relative overflow-hidden">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-white/10">
@@ -141,7 +210,7 @@ export default function SpecificationModal({ isOpen, onClose }: SpecificationMod
                   </div>
 
                   <div className="self-start sm:self-auto bg-black/40 border border-white/5 px-3 py-2 rounded-xl text-right">
-                    <div className="text-[10px] text-white/40 uppercase tracking-wider font-semibold">Build Hash</div>
+                    <div className="text-[10px] text-white/40 uppercase tracking-wider font-semibold">Build ID</div>
                     <div className="font-mono text-xs text-cyan-300">{APP_VERSION_INFO.buildNumber}</div>
                   </div>
                 </div>
@@ -258,8 +327,8 @@ export default function SpecificationModal({ isOpen, onClose }: SpecificationMod
                     <span className="text-emerald-300 font-medium">Production Live</span>
                   </div>
                   <div className="bg-white/5 p-2 rounded-lg">
-                    <span className="text-white/40 block text-[10px]">Duplex Engine</span>
-                    <span className="text-cyan-300 font-medium">WebSocket WSS</span>
+                    <span className="text-white/40 block text-[10px]">Release System</span>
+                    <span className="text-cyan-300 font-medium">Automated Pipeline</span>
                   </div>
                   <div className="bg-white/5 p-2 rounded-lg">
                     <span className="text-white/40 block text-[10px]">VAD Latency</span>
@@ -359,7 +428,7 @@ export default function SpecificationModal({ isOpen, onClose }: SpecificationMod
         <div className="shrink-0 bg-[#161826] border-t border-white/10 px-5 py-3 flex items-center justify-between text-xs text-white/50">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-emerald-400" />
-            <span>Assistant Live Architecture</span>
+            <span>Automated Build Pipeline Active</span>
           </div>
 
           <button

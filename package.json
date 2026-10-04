@@ -4,7 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "predev": "node scripts/generate-build-info.cjs",
     "dev": "vite --port=3000 --host=0.0.0.0",
+    "prebuild": "node scripts/generate-build-info.cjs",
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist",

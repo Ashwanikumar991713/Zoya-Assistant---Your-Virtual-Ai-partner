@@ -3,11 +3,26 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 import { defineConfig, loadEnv } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
+import { execSync } from 'child_process';
+
+function autoBuildMetaPlugin() {
+  return {
+    name: 'auto-build-meta-plugin',
+    buildStart() {
+      try {
+        execSync('node scripts/generate-build-info.cjs', { stdio: 'pipe' });
+      } catch (e) {
+        console.warn('AutoBuildMetaPlugin notice:', e);
+      }
+    }
+  };
+}
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', '');
   return {
     plugins: [
+      autoBuildMetaPlugin(),
       react(), 
       tailwindcss(),
       VitePWA({

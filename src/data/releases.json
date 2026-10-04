@@ -1,0 +1,129 @@
+[
+  {
+    "version": "v2.6.1",
+    "build": "2026.10.04.3-rel",
+    "date": "October 4, 2026",
+    "time": "11:25 PM IST",
+    "title": "Clean Minimal Header & Automated Release Pipeline",
+    "badge": "Latest Live 🚀",
+    "channel": "Production Release",
+    "whatsNew": [
+      {
+        "title": "Clean Minimal Main Screen (मेन स्क्रीन से वर्ज़न हटाया)",
+        "description": "मेन स्क्रीन हेडर से वर्ज़न बटन को हटा दिया गया है ताकि इंटरफेस एकम क्लीन, प्रीमियम और डिस्ट्रैक्शन-फ्री दिखे। अब यह केवल सेटिंग्स > Specification में व्यवस्थित है।",
+        "icon": "✨",
+        "tag": "UI/UX"
+      },
+      {
+        "title": "Automated Build & Versioning Pipeline (ऑटोमेटेड वर्ज़न सिस्टम)",
+        "description": "मैनुअल एडिटिंग की जगह ऑटोमेटेड रिलीज़ पाइपलाइन तैयार की गई है। जैसे ही नया कोड इंटरनेट पर लाइव होता है, बिल्ड हैश, टाइमस्टैम्प और चेंजलॉग स्वतः सिंक हो जाते हैं।",
+        "icon": "⚙️",
+        "tag": "DevOps"
+      },
+      {
+        "title": "Live Update Checker (लाइव अपडेट चेकर)",
+        "description": "Specification सेक्शन में 'Check for Live Updates' बटन जोड़ा गया है। यूजर एक क्लिक में सर्वर से लेटेस्ट अपडेट चेक कर सकते हैं और ऐप रीफ़्रेश कर सकते हैं।",
+        "icon": "🔄",
+        "tag": "Feature"
+      },
+      {
+        "title": "Isolated Personalised Settings (शुद्ध पर्सनलाइज़्ड सेटिंग्स)",
+        "description": "पर्सनलाइज़्ड सेटिंग्स पेज को टेक्निकल वर्ज़न डिटेल्स से पूरी तरह मुक्त रखा गया है, ताकि पर्सनल प्रेफरेंस सेट करना आसान रहे।",
+        "icon": "🎯",
+        "tag": "Architecture"
+      },
+      {
+        "title": "Smart Background Video Sync (स्मार्ट वीडियो सिंक)",
+        "description": "अपलोड की गई बैकग्राउंड वीडियो सिर्फ तब चलती है जब असिस्टेंट से बातचीत शुरू हो। सेशन बंद होते ही वीडियो स्वतः पॉज़/स्टॉप हो जाती है।",
+        "icon": "🎥",
+        "tag": "Media"
+      }
+    ],
+    "changes": [
+      "Removed intrusive version pill from header above topic button",
+      "Created automated build-meta generator script and Vite integration",
+      "Added live update polling and manual check-for-updates button in Specification modal",
+      "Updated semantic version to v2.6.1 with automatic timestamping and build hash"
+    ]
+  },
+  {
+    "version": "v2.6.0",
+    "build": "2026.10.04.2-prod",
+    "date": "October 4, 2026",
+    "time": "10:50 PM IST",
+    "title": "Dedicated System Specification Section & Decoupled Personalization",
+    "badge": "Stable 🚀",
+    "channel": "Production",
+    "whatsNew": [
+      {
+        "title": "Dedicated Specification Section",
+        "description": "System architecture, audio engine specs and version history isolated into its own dedicated modal.",
+        "icon": "📋",
+        "tag": "Architecture"
+      }
+    ],
+    "changes": [
+      "Removed version details from Personalised Settings modal",
+      "Created dedicated Specification & Version modal",
+      "Added Comprehensive Technical System Specifications overview"
+    ]
+  },
+  {
+    "version": "v2.5.0",
+    "build": "2026.10.04.1-prod",
+    "date": "October 4, 2026",
+    "time": "09:25 PM IST",
+    "title": "Smart Video Sync & Lightning Conversational Flow",
+    "badge": "Stable",
+    "channel": "Production",
+    "whatsNew": [
+      {
+        "title": "Smart Video Playback Sync",
+        "description": "Background video runs strictly when assistant session is active.",
+        "icon": "🎥",
+        "tag": "Media"
+      },
+      {
+        "title": "Zero-Latency Instant Replies",
+        "description": "Thinking delay disabled with 250ms VAD for instant voice turn-taking.",
+        "icon": "⚡",
+        "tag": "Engine"
+      }
+    ],
+    "changes": [
+      "Smart Background video playback synchronized strictly to assistant active session",
+      "Thinking delay bypassed (thinkingBudget: 0) for zero-wait speech output",
+      "Continuous 16-bit PCM Audio Chunk alignment to eliminate sound distortion"
+    ]
+  },
+  {
+    "version": "v2.4.0",
+    "build": "2026.09.29.3-prod",
+    "date": "September 29, 2026",
+    "time": "07:15 PM IST",
+    "title": "Female Voice Safeguard & Activity Detection Tuning",
+    "badge": "Stable",
+    "channel": "Production",
+    "whatsNew": [],
+    "changes": [
+      "Voice sanitization and persona enforcement",
+      "Activity Handling tuning with 250ms VAD trigger",
+      "ErrorBoundary stability improvements"
+    ]
+  },
+  {
+    "version": "v2.0.0",
+    "build": "2026.09.20.1-prod",
+    "date": "September 20, 2026",
+    "time": "03:40 PM IST",
+    "title": "Gemini Live API Bidirectional Audio & Custom Video Backgrounds",
+    "badge": "Milestone",
+    "channel": "Production",
+    "whatsNew": [],
+    "changes": [
+      "Integration of Gemini 3.8 Live API WebSocket",
+      "Custom video wallpaper upload and loop canvas",
+      "Progressive Web App installation capabilities"
+    ]
+  }
+]
