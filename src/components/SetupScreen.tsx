@@ -1,8 +1,7 @@
 import React, { useState } from "react";
-import { Sparkles, KeyRound, User, MessageSquareHeart, Check, Volume2, X, Heart, Calendar, Clock, Info, ChevronDown, ChevronUp, History } from "lucide-react";
-import { motion, AnimatePresence } from "motion/react";
+import { Sparkles, KeyRound, User, MessageSquareHeart, Check, Volume2, X, Heart } from "lucide-react";
+import { motion } from "motion/react";
 import { AppConfig } from "../types";
-import { APP_VERSION_INFO } from "../version";
 
 interface SetupScreenProps {
   onComplete: (config: AppConfig) => void;
@@ -55,7 +54,6 @@ export default function SetupScreen({ onComplete, onCancel, initialConfig }: Set
   const [voiceName, setVoiceName] = useState(initialVoice);
   const [systemPrompt, setSystemPrompt] = useState(initialConfig?.systemPrompt || "");
   const [errorMsg, setErrorMsg] = useState("");
-  const [showPreviousUpdates, setShowPreviousUpdates] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -262,134 +260,6 @@ export default function SetupScreen({ onComplete, onCancel, initialConfig }: Set
               <p className="text-[10px] text-white/40">
                 Tuned by default for sweet, affectionate conversational Hindi, Hinglish, and English.
               </p>
-            </div>
-
-            {/* 4. ASSISTANT VERSION, UPDATE TIMINGS & CHANGELOG SECTION */}
-            <div className="pt-2 border-t border-white/10 space-y-3">
-              <div className="flex items-center justify-between">
-                <label className="text-xs sm:text-sm font-medium text-white/90 flex items-center gap-2">
-                  <Sparkles size={15} className="text-cyan-400" />
-                  <span>Assistant Version & Update Details (वर्ज़न एवं अपडेट)</span>
-                </label>
-                <div className="flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                  <span className="text-[10px] sm:text-xs font-mono font-semibold text-emerald-300 bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 rounded-full">
-                    {APP_VERSION_INFO.version}
-                  </span>
-                </div>
-              </div>
-
-              {/* Version & Date Card */}
-              <div className="bg-gradient-to-br from-[#181C28] to-[#12141C] border border-cyan-500/30 rounded-2xl p-4 shadow-xl space-y-3.5 relative overflow-hidden">
-                {/* Ambient glow */}
-                <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-500/10 blur-3xl pointer-events-none rounded-full" />
-
-                {/* Top Info Banner */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-white/10">
-                  <div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-base font-bold text-white tracking-wide">
-                        {APP_VERSION_INFO.version}
-                      </span>
-                      <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
-                        {APP_VERSION_INFO.badge}
-                      </span>
-                    </div>
-                    <div className="text-[11px] text-white/60 font-medium mt-0.5">
-                      {APP_VERSION_INFO.releaseTitle}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-3 text-[11px] text-white/50 bg-black/40 px-3 py-1.5 rounded-xl border border-white/5 self-start sm:self-auto">
-                    <span className="font-mono text-[10px] text-white/40">Build: {APP_VERSION_INFO.buildNumber}</span>
-                  </div>
-                </div>
-
-                {/* Update Date & Time Badges */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                  <div className="flex items-center gap-2.5 bg-black/30 border border-white/5 px-3 py-2 rounded-xl">
-                    <Calendar size={14} className="text-pink-400 shrink-0" />
-                    <div>
-                      <div className="text-[10px] text-white/40 leading-none mb-0.5">Last Updated Date:</div>
-                      <div className="text-white font-medium text-[11px] sm:text-xs">
-                        {APP_VERSION_INFO.lastUpdatedDate}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2.5 bg-black/30 border border-white/5 px-3 py-2 rounded-xl">
-                    <Clock size={14} className="text-amber-400 shrink-0" />
-                    <div>
-                      <div className="text-[10px] text-white/40 leading-none mb-0.5">Last Updated Time:</div>
-                      <div className="text-white font-medium text-[11px] sm:text-xs font-mono">
-                        {APP_VERSION_INFO.lastUpdatedTime}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* What's New List */}
-                <div className="space-y-2 pt-1">
-                  <div className="text-[11px] font-semibold text-cyan-300 flex items-center gap-1.5 uppercase tracking-wider">
-                    <span>What's New in this Update (इस अपडेट में क्या नया है):</span>
-                  </div>
-
-                  <div className="space-y-2">
-                    {APP_VERSION_INFO.whatsNew.map((item, idx) => (
-                      <div 
-                        key={idx}
-                        className="bg-black/40 border border-white/5 hover:border-cyan-500/30 p-2.5 rounded-xl transition-colors space-y-1"
-                      >
-                        <div className="flex items-center gap-2 text-xs font-semibold text-white">
-                          <span className="text-sm shrink-0">{item.icon || "✨"}</span>
-                          <span>{item.title}</span>
-                        </div>
-                        <p className="text-[11px] text-white/70 leading-relaxed pl-6">
-                          {item.description}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Previous Versions Expandable Toggle */}
-                {APP_VERSION_INFO.previousUpdates && APP_VERSION_INFO.previousUpdates.length > 0 && (
-                  <div className="pt-2 border-t border-white/5">
-                    <button
-                      type="button"
-                      onClick={() => setShowPreviousUpdates(!showPreviousUpdates)}
-                      className="w-full flex items-center justify-between text-[11px] text-white/50 hover:text-white/80 py-1 transition-colors cursor-pointer"
-                    >
-                      <div className="flex items-center gap-1.5">
-                        <History size={13} className="text-white/40" />
-                        <span>Previous Version History ({APP_VERSION_INFO.previousUpdates.length} older updates)</span>
-                      </div>
-                      {showPreviousUpdates ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                    </button>
-
-                    <AnimatePresence>
-                      {showPreviousUpdates && (
-                        <motion.div
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: "auto" }}
-                          exit={{ opacity: 0, height: 0 }}
-                          className="space-y-2 pt-2 overflow-hidden"
-                        >
-                          {APP_VERSION_INFO.previousUpdates.map((old, i) => (
-                            <div key={i} className="bg-black/20 border border-white/5 rounded-lg p-2 text-[11px] space-y-0.5">
-                              <div className="flex items-center justify-between text-white/80 font-medium">
-                                <span className="font-mono text-cyan-300">{old.version}</span>
-                                <span className="text-[10px] text-white/40">{old.date}</span>
-                              </div>
-                              <p className="text-[10px] text-white/60">{old.summary}</p>
-                            </div>
-                          ))}
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
-                )}
-              </div>
             </div>
           </div>
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { Mic, MicOff, Loader2, Volume2, VolumeX, Keyboard, Send, Trash2, Video, Settings, MoreVertical, Edit3, Key, Download, ScrollText, RefreshCw, Sparkles } from "lucide-react";
+import { Mic, MicOff, Loader2, Volume2, VolumeX, Keyboard, Send, Trash2, Video, Settings, MoreVertical, Edit3, Key, Download, ScrollText, RefreshCw, Sparkles, Cpu } from "lucide-react";
 import { getZoyaResponse, getZoyaAudio, resetZoyaSession } from "./services/geminiService";
 import { usePWAInstall } from "./hooks/usePWAInstall";
 import { processCommand } from "./services/commandService";
@@ -7,6 +7,7 @@ import { LiveSessionManager } from "./services/liveService";
 import Visualizer from "./components/Visualizer";
 import PermissionModal from "./components/PermissionModal";
 import SetupScreen from "./components/SetupScreen";
+import SpecificationModal from "./components/SpecificationModal";
 import TopicScriptModal from "./components/TopicScriptModal";
 import VoiceSelectorModal from "./components/VoiceSelectorModal";
 import { playPCM } from "./utils/audioUtils";
@@ -81,6 +82,7 @@ export default function App() {
   const [volume, setVolume] = useState(1.0);
   const [showVolumeSlider, setShowVolumeSlider] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showSpecsModal, setShowSpecsModal] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
@@ -377,6 +379,10 @@ export default function App() {
           onCancel={() => setShowSettings(false)}
         />
       )}
+      <SpecificationModal 
+        isOpen={showSpecsModal} 
+        onClose={() => setShowSpecsModal(false)} 
+      />
       {showPermissionModal && (
         <PermissionModal 
           assistantName={config?.assistantName}
@@ -432,9 +438,21 @@ export default function App() {
 
       {/* Header */}
       <header className="w-full flex justify-between items-center z-20 shrink-0 px-6 py-6 md:px-12 md:py-8">
-        <h1 className="text-xl md:text-2xl font-light tracking-[0.3em] uppercase opacity-90 text-white/90">
-          {config.assistantName.split('').join('.')}
-        </h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-xl md:text-2xl font-light tracking-[0.3em] uppercase opacity-90 text-white/90">
+            {config.assistantName.split('').join('.')}
+          </h1>
+          <button
+            onClick={() => setShowSpecsModal(true)}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#181A22] hover:bg-[#252836] border border-cyan-500/30 hover:border-cyan-500/60 shadow-md text-xs transition-all cursor-pointer group"
+            title="Open System Specification & Live Version Details"
+          >
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="font-mono text-[11px] font-semibold text-cyan-300 group-hover:text-cyan-200">
+              {APP_VERSION_INFO.version}
+            </span>
+          </button>
+        </div>
         
         <div className="flex items-center gap-3">
           {/* Topic & Script Direct Button */}
@@ -475,13 +493,13 @@ export default function App() {
                   <button 
                     onClick={() => {
                       setMenuOpen(false);
-                      setShowSettings(true);
+                      setShowSpecsModal(true);
                     }}
-                    className="w-full text-left px-4 py-3 text-sm text-cyan-300 hover:bg-white/5 transition-colors flex items-center justify-between border-b border-white/5"
+                    className="w-full text-left px-4 py-3 text-sm text-cyan-300 hover:bg-white/5 transition-colors flex items-center justify-between border-b border-white/5 cursor-pointer"
                   >
                     <div className="flex items-center gap-2.5">
-                      <Sparkles size={15} className="text-cyan-400" />
-                      <span>Version & Updates</span>
+                      <Cpu size={16} className="text-cyan-400" />
+                      <span>Specification</span>
                     </div>
                     <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-semibold">
                       {APP_VERSION_INFO.version}
@@ -493,20 +511,20 @@ export default function App() {
                       setMenuOpen(false);
                       setShowSettings(true);
                     }}
-                    className="w-full text-left px-4 py-3 text-sm text-white/90 hover:bg-white/5 transition-colors flex items-center gap-3"
+                    className="w-full text-left px-4 py-3 text-sm text-white/90 hover:bg-white/5 transition-colors flex items-center gap-3 cursor-pointer"
                   >
                     <Edit3 size={16} className="text-orange-400" />
-                    Personalised
+                    <span>Personalised</span>
                   </button>
                   <button 
                     onClick={() => {
                       setMenuOpen(false);
                       setShowSettings(true);
                     }}
-                    className="w-full text-left px-4 py-3 text-sm text-white/90 hover:bg-white/5 transition-colors flex items-center gap-3"
+                    className="w-full text-left px-4 py-3 text-sm text-white/90 hover:bg-white/5 transition-colors flex items-center gap-3 cursor-pointer"
                   >
                     <Key size={16} className="text-violet-400" />
-                    Your API Key
+                    <span>Your API Key</span>
                   </button>
 
                   <button 
