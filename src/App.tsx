@@ -438,21 +438,9 @@ export default function App() {
 
       {/* Header */}
       <header className="w-full flex justify-between items-center z-20 shrink-0 px-6 py-6 md:px-12 md:py-8">
-        <div className="flex items-center gap-3">
-          <h1 className="text-xl md:text-2xl font-light tracking-[0.3em] uppercase opacity-90 text-white/90">
-            {config.assistantName.split('').join('.')}
-          </h1>
-          <button
-            onClick={() => setShowSpecsModal(true)}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#181A22] hover:bg-[#252836] border border-cyan-500/30 hover:border-cyan-500/60 shadow-md text-xs transition-all cursor-pointer group"
-            title="Open System Specification & Live Version Details"
-          >
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="font-mono text-[11px] font-semibold text-cyan-300 group-hover:text-cyan-200">
-              {APP_VERSION_INFO.version}
-            </span>
-          </button>
-        </div>
+        <h1 className="text-xl md:text-2xl font-light tracking-[0.3em] uppercase opacity-90 text-white/90">
+          {config.assistantName.split('').join('.')}
+        </h1>
         
         <div className="flex items-center gap-3">
           {/* Topic & Script Direct Button */}
