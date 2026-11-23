@@ -41,12 +41,12 @@ export interface VersionInfo {
 }
 
 export const APP_VERSION_INFO: VersionInfo = {
-  "version": "v2.7.5",
-  "buildNumber": "2026.11.12.6-6b4b0ecc",
-  "commitHash": "6b4b0ecc",
-  "buildTimestamp": "2026-11-12T09:36:33.890Z",
-  "lastUpdatedDate": "November 12, 2026",
-  "lastUpdatedTime": "03:06 PM IST",
+  "version": "v2.7.7",
+  "buildNumber": "2026.11.23.8-935c824b",
+  "commitHash": "935c824b",
+  "buildTimestamp": "2026-11-23T14:10:02.197Z",
+  "lastUpdatedDate": "November 23, 2026",
+  "lastUpdatedTime": "07:40 PM IST",
   "releaseTitle": "Automated Release & Live Synchronization Update",
   "badge": "Latest Live 🚀",
   "channel": "Production Release",
@@ -54,7 +54,7 @@ export const APP_VERSION_INFO: VersionInfo = {
   "whatsNew": [
     {
       "title": "Automated Version Engine (ऑटो-वर्ज़न इंक्रीमेंट)",
-      "description": "कोड में नए बदलाव होते ही सिस्टम स्वतः वर्ज़न को v2.7.5 पर अपडेट करता है।",
+      "description": "कोड में नए बदलाव होते ही सिस्टम स्वतः वर्ज़न को v2.7.7 पर अपडेट करता है।",
       "icon": "🚀",
       "tag": "Auto-Build"
     },
@@ -110,6 +110,30 @@ export const APP_VERSION_INFO: VersionInfo = {
     }
   ],
   "versionHistory": [
+    {
+      "version": "v2.7.7",
+      "build": "2026.11.23.8-935c824b",
+      "date": "November 23, 2026",
+      "time": "07:40 PM IST",
+      "title": "Automated Release & Live Synchronization Update",
+      "changes": [
+        "Automated version increment to v2.7.7 on code build",
+        "Build timestamp updated to 07:35 PM IST on November 23, 2026",
+        "Content hash generated: 935c824b"
+      ]
+    },
+    {
+      "version": "v2.7.6",
+      "build": "2026.11.23.7-9a0dd08b",
+      "date": "November 23, 2026",
+      "time": "07:12 PM IST",
+      "title": "Automated Release & Live Synchronization Update",
+      "changes": [
+        "Automated version increment to v2.7.6 on code build",
+        "Build timestamp updated to 07:12 PM IST on November 23, 2026",
+        "Content hash generated: 9a0dd08b"
+      ]
+    },
     {
       "version": "v2.7.5",
       "build": "2026.11.12.6-6b4b0ecc",

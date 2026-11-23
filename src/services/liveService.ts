@@ -1,4 +1,11 @@
 import { AppConfig, AppState } from "../types";
+import {
+  VOICE_ACTION_DECLARATIONS,
+  VOICE_ACTION_PROMPT_DIRECTIVE,
+  executeVoiceToolCall,
+  VoiceActionEvent,
+  PendingWhatsAppVerification,
+} from "./voiceActions";
 
 // Cache backend server capability detection for the current page session
 let cachedServerBridgeAvailable: boolean | null = null;
@@ -108,7 +115,12 @@ function buildLiveSystemInstruction(config: AppConfig): string {
 Weave naturally into your thoughts in your own sweet, casual speaking style.`;
   }
 
-  return baseInstruction + strictFemaleAndInstantDirective + topicContext;
+  return (
+    baseInstruction +
+    strictFemaleAndInstantDirective +
+    VOICE_ACTION_PROMPT_DIRECTIVE +
+    topicContext
+  );
 }
 
 export class LiveSessionManager {
@@ -145,9 +157,14 @@ export class LiveSessionManager {
   public isMuted: boolean = false;
   public volume: number = 1.0;
 
+  // Voice command & WhatsApp verification state
+  private pendingWhatsApp: PendingWhatsAppVerification | null = null;
+
   public onStateChange: (state: AppState) => void = () => {};
   public onMessage: (sender: "user" | "zoya", text: string) => void = () => {};
   public onCommand: (url: string) => void = () => {};
+  public onAction: (action: VoiceActionEvent) => void = () => {};
+  public onPendingWhatsAppChange: (pending: PendingWhatsAppVerification | null) => void = () => {};
   public onAudioLevel: (level: number) => void = () => {};
   public onError: (errorInfo: { message: string; isFatal: boolean; reason?: string }) => void = () => {};
 
@@ -435,13 +452,13 @@ export class LiveSessionManager {
                 if (msg.text !== this.lastUserTranscript) {
                   this.lastUserTranscript = msg.text;
                   this.onMessage("user", msg.text);
-                  this.detectAndTriggerAction(msg.text);
                 }
               } else {
                 this.onMessage("zoya", msg.text);
-                this.detectAndTriggerAction(msg.text);
               }
             }
+          } else if (msg.type === "toolCall" && Array.isArray(msg.functionCalls)) {
+            this.handleToolCalls(msg.functionCalls);
           } else if (msg.type === "close") {
             if (!closedHandled) {
               closedHandled = true;
@@ -536,6 +553,7 @@ export class LiveSessionManager {
               systemInstruction: {
                 parts: [{ text: systemInstruction }],
               },
+              tools: [{ functionDeclarations: VOICE_ACTION_DECLARATIONS }],
               inputAudioTranscription: {},
               outputAudioTranscription: {},
               realtimeInputConfig: {
@@ -616,7 +634,6 @@ export class LiveSessionManager {
             serverMessage.serverContent?.modelTurn?.parts?.find((p: any) => p.text)?.text;
           if (companionText && companionText.trim()) {
             this.onMessage("zoya", companionText.trim());
-            this.detectAndTriggerAction(companionText.trim());
           }
 
           // 6. User Spoken Transcription
@@ -624,7 +641,12 @@ export class LiveSessionManager {
           if (userTranscription && userTranscription.trim() && userTranscription.trim() !== this.lastUserTranscript) {
             this.lastUserTranscript = userTranscription.trim();
             this.onMessage("user", this.lastUserTranscript);
-            this.detectAndTriggerAction(this.lastUserTranscript);
+          }
+
+          // 7. Function / Tool Calls (YouTube, Spotify, Google, Websites, Verified WhatsApp)
+          const functionCalls = serverMessage.toolCall?.functionCalls;
+          if (Array.isArray(functionCalls) && functionCalls.length > 0) {
+            this.handleToolCalls(functionCalls);
           }
         } catch (e) {
           console.warn("Direct Live WebSocket message parse error:", e);
@@ -733,34 +755,61 @@ export class LiveSessionManager {
     this.scheduleReconnect();
   }
 
-  // Fast client-side command detector to open apps/sites without LLM function-calling latency
-  private detectAndTriggerAction(text: string) {
-    const lower = text.toLowerCase();
+  public setPendingWhatsApp(pending: PendingWhatsAppVerification | null) {
+    this.pendingWhatsApp = pending;
+  }
 
-    // YouTube
-    const ytMatch =
-      lower.match(/(?:play|chalao|suno)\s+(.+?)\s+on\s+youtube/i) ||
-      lower.match(/youtube\s+(?:pe|par)\s+(.+?)\s+(?:chalao|play)/i);
-    if (ytMatch) {
-      const q = encodeURIComponent(ytMatch[1].trim());
-      this.onCommand(`https://www.youtube.com/results?search_query=${q}`);
-      return;
+  private handleToolCalls(functionCalls: Array<{ id?: string; name: string; args?: Record<string, any> }>) {
+    const functionResponses: Array<{ id?: string; name: string; response: Record<string, any> }> = [];
+
+    for (const call of functionCalls) {
+      if (!call || !call.name) continue;
+      const result = executeVoiceToolCall(call.name, call.args || {}, this.pendingWhatsApp);
+
+      if (result.pendingWhatsApp) {
+        this.pendingWhatsApp = result.pendingWhatsApp;
+        this.onPendingWhatsAppChange(this.pendingWhatsApp);
+      } else if (result.clearPendingWhatsApp) {
+        this.pendingWhatsApp = null;
+        this.onPendingWhatsAppChange(null);
+      }
+
+      if (result.action) {
+        this.onAction(result.action);
+      }
+
+      functionResponses.push({
+        id: call.id,
+        name: call.name,
+        response: result.toolResponse,
+      });
     }
 
-    // Spotify
-    const spMatch = lower.match(/(?:play|search)\s+(.+?)\s+on\s+spotify/i);
-    if (spMatch) {
-      const q = encodeURIComponent(spMatch[1].trim());
-      this.onCommand(`https://open.spotify.com/search/${q}`);
-      return;
-    }
-
-    // General website
-    const webMatch = lower.match(/^open\s+([a-zA-Z0-9_\-\.]+)/i);
-    if (webMatch && !lower.includes("youtube") && !lower.includes("spotify") && !lower.includes("whatsapp")) {
-      let site = webMatch[1].trim();
-      if (!site.includes(".")) site += ".com";
-      this.onCommand(`https://www.${site}`);
+    if (
+      functionResponses.length > 0 &&
+      this.activeWs &&
+      this.activeWs.readyState === WebSocket.OPEN
+    ) {
+      try {
+        if (this.connectionMode === "server-bridge") {
+          this.activeWs.send(
+            JSON.stringify({
+              type: "toolResponse",
+              functionResponses,
+            })
+          );
+        } else {
+          this.activeWs.send(
+            JSON.stringify({
+              toolResponse: {
+                functionResponses,
+              },
+            })
+          );
+        }
+      } catch (err) {
+        console.warn("Failed to send toolResponse:", err);
+      }
     }
   }
 
@@ -923,6 +972,8 @@ export class LiveSessionManager {
   stop() {
     this.isExplicitlyStopped = true;
     this.reconnectAttempts = 0;
+    this.pendingWhatsApp = null;
+    this.onPendingWhatsAppChange(null);
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;

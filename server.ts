@@ -13,6 +13,10 @@ import {
   ActivityHandling,
 } from "@google/genai";
 import type { LiveServerMessage } from "@google/genai";
+import {
+  VOICE_ACTION_DECLARATIONS,
+  VOICE_ACTION_PROMPT_DIRECTIVE,
+} from "./src/services/voiceActions.ts";
 
 dotenv.config();
 
@@ -141,16 +145,22 @@ Naturally weave this into your conversation in your own sweet, casual speaking s
     }
 
     const chatSession = ai.chats.create({
-      model: "gemini-3.8-flash",
+      model: "gemini-4-hydrogen",
       config: {
-        systemInstruction: baseInstruction + strictPersonaInstruction + topicContext,
+        systemInstruction:
+          baseInstruction +
+          strictPersonaInstruction +
+          VOICE_ACTION_PROMPT_DIRECTIVE +
+          topicContext,
+        tools: [{ functionDeclarations: VOICE_ACTION_DECLARATIONS as any }],
       },
       history: formattedHistory,
     });
 
     const response = await chatSession.sendMessage({ message: prompt });
     res.json({
-      text: response.text || "Haan ji, main yahin hoon aapke sath.",
+      text: response.text || "",
+      functionCalls: response.functionCalls || [],
     });
   } catch (error: any) {
     console.error("Server /api/gemini/chat error:", error);
@@ -192,7 +202,7 @@ app.post("/api/gemini/chat-stream", async (req: Request, res: Response) => {
     res.setHeader("Connection", "keep-alive");
 
     const stream = await ai.models.generateContentStream({
-      model: "gemini-3.8-flash",
+      model: "gemini-4-hydrogen",
       contents: prompt,
       config: {
         systemInstruction: baseInstruction,
@@ -347,7 +357,12 @@ Weave naturally into your thoughts in your own sweet, casual speaking style.`;
               speechConfig: {
                 voiceConfig: { prebuiltVoiceConfig: { voiceName: voiceToUse } },
               },
-              systemInstruction: baseInstruction + strictFemaleAndInstantDirective + topicContext,
+              systemInstruction:
+                baseInstruction +
+                strictFemaleAndInstantDirective +
+                VOICE_ACTION_PROMPT_DIRECTIVE +
+                topicContext,
+              tools: [{ functionDeclarations: VOICE_ACTION_DECLARATIONS as any }],
               inputAudioTranscription: {},
               outputAudioTranscription: {},
               realtimeInputConfig: {
@@ -411,6 +426,28 @@ Weave naturally into your thoughts in your own sweet, casual speaking style.`;
                     JSON.stringify({ type: "transcript", role: "user", text: userTranscription.trim() })
                   );
                 }
+
+                // 6. Function / Tool Calls (YouTube, Spotify, Websites, Google, WhatsApp Web)
+                const functionCalls = serverMessage.toolCall?.functionCalls;
+                if (functionCalls && functionCalls.length > 0) {
+                  clientWs.send(
+                    JSON.stringify({
+                      type: "toolCall",
+                      functionCalls,
+                    })
+                  );
+                }
+
+                // 7. Tool Call Cancellation (when user interrupts mid-call)
+                const cancelledIds = serverMessage.toolCallCancellation?.ids;
+                if (cancelledIds && cancelledIds.length > 0) {
+                  clientWs.send(
+                    JSON.stringify({
+                      type: "toolCallCancellation",
+                      ids: cancelledIds,
+                    })
+                  );
+                }
               },
               onclose: (event: any) => {
                 if (!isClosed && clientWs.readyState === WebSocket.OPEN) {
@@ -463,6 +500,16 @@ Weave naturally into your thoughts in your own sweet, casual speaking style.`;
           liveSession.sendRealtimeInput({
             text: `[SYSTEM: Active topic or focus updated to: "${msg.topic}". Weave naturally into conversation in your own sweet, casual speaking style.]`,
           });
+        }
+      } else if (msg.type === "toolResponse") {
+        if (liveSession && Array.isArray(msg.functionResponses)) {
+          try {
+            liveSession.sendToolResponse({
+              functionResponses: msg.functionResponses,
+            });
+          } catch (toolRespErr) {
+            console.warn("Live sendToolResponse warning:", toolRespErr);
+          }
         }
       }
     } catch (parseError) {

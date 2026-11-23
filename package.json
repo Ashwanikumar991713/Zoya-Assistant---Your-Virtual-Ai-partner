@@ -1,7 +1,7 @@
 {
   "name": "react-example",
   "private": true,
-  "version": "2.7.5",
+  "version": "2.7.7",
   "type": "module",
   "scripts": {
     "predev": "node scripts/generate-build-info.cjs",

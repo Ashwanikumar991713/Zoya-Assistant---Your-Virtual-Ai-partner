@@ -1,63 +1,126 @@
-export function processCommand(command: string): {
-  action: string;
-  url?: string;
-  isBrowserAction: boolean;
-} {
-  const lowerCmd = command.toLowerCase().trim();
+import {
+  executeVoiceToolCall,
+  PendingWhatsAppVerification,
+  VoiceToolExecutionResult,
+} from "./voiceActions";
 
-  // General Browsing: "Open [website name]"
-  const openMatch = lowerCmd.match(/^open\s+(.+)$/);
-  if (
-    openMatch &&
-    !lowerCmd.includes("youtube") &&
-    !lowerCmd.includes("spotify")
-  ) {
-    let website = openMatch[1].trim().replace(/\s+/g, "");
-    if (!website.includes(".")) {
-      website += ".com";
+export interface ProcessedTextCommand {
+  matched: boolean;
+  result?: VoiceToolExecutionResult;
+}
+
+export function processCommand(
+  command: string,
+  pendingWhatsApp: PendingWhatsAppVerification | null = null
+): ProcessedTextCommand {
+  const raw = command.trim();
+  const lowerCmd = raw.toLowerCase();
+
+  // If a WhatsApp verification is currently pending, handle quick text confirmation or cancellation
+  if (pendingWhatsApp) {
+    if (/^(haan|han|yes|yep|yeah|sahi hai|theek hai|thik hai|confirm|bhej do|send|ok|okay)\b/i.test(lowerCmd)) {
+      return {
+        matched: true,
+        result: executeVoiceToolCall(
+          "confirm_and_open_whatsapp",
+          {
+            phoneNumber: pendingWhatsApp.digits,
+            message: pendingWhatsApp.message,
+            recipientName: pendingWhatsApp.recipientName,
+          },
+          pendingWhatsApp
+        ),
+      };
     }
-    return {
-      action: `Opening ${openMatch[1]} for you, ugh.`,
-      url: `https://www.${website}`,
-      isBrowserAction: true,
-    };
+    if (/^(nahi|no|cancel|mat bhejo|rehne do|stop)\b/i.test(lowerCmd)) {
+      return {
+        matched: true,
+        result: executeVoiceToolCall("cancel_whatsapp_draft", {}, pendingWhatsApp),
+      };
+    }
   }
 
-  // Media Search: "Play [song/video] on YouTube"
-  const ytMatch = lowerCmd.match(/^play\s+(.+?)\s+on\s+youtube$/);
-  if (ytMatch) {
-    const query = encodeURIComponent(ytMatch[1].trim());
-    return {
-      action: `Playing ${ytMatch[1]} on YouTube. Don't judge my music taste.`,
-      url: `https://www.youtube.com/results?search_query=${query}`,
-      isBrowserAction: true,
-    };
-  }
-
-  // Media Search: "Search [query] on Spotify"
-  const spotifyMatch = lowerCmd.match(/^search\s+(.+?)\s+on\s+spotify$/);
-  if (spotifyMatch) {
-    const query = encodeURIComponent(spotifyMatch[1].trim());
-    return {
-      action: `Searching ${spotifyMatch[1]} on Spotify. Hope it's a banger.`,
-      url: `https://open.spotify.com/search/${query}`,
-      isBrowserAction: true,
-    };
-  }
-
-  // WhatsApp Web: "Send a WhatsApp message to [number] saying [message]"
-  const waMatch = lowerCmd.match(
-    /^send\s+a\s+whatsapp\s+message\s+to\s+([\d\+\s]+)\s+saying\s+(.+)$/,
-  );
+  // WhatsApp: always stage verification first (never bypass number verification)
+  const waMatch =
+    raw.match(
+      /(?:send\s+(?:a\s+)?)?whatsapp\s+(?:message\s+)?to\s+([\d+\-\s]{10,18})\s+(?:saying|message|that|:)\s+(.+)$/i
+    ) ||
+    raw.match(
+      /whatsapp\s+(?:pe|par)\s+([\d+\-\s]{10,18})\s+(?:ko)\s+(.+?)\s+(?:message\s+)?(?:bhejo|send\s*karo)$/i
+    );
   if (waMatch) {
-    const number = waMatch[1].replace(/\s+/g, "");
-    const message = encodeURIComponent(waMatch[2].trim());
     return {
-      action: `Sending your message. Let's hope they reply, Ashwani.`,
-      url: `https://web.whatsapp.com/send?phone=${number}&text=${message}`,
-      isBrowserAction: true,
+      matched: true,
+      result: executeVoiceToolCall(
+        "verify_whatsapp_number",
+        {
+          phoneNumber: waMatch[1].trim(),
+          message: waMatch[2].trim(),
+        },
+        pendingWhatsApp
+      ),
     };
   }
 
-  return { action: "", isBrowserAction: false };
+  // YouTube
+  const ytMatch =
+    raw.match(/^(?:play|search|chalao|suno)\s+(.+?)\s+(?:on|pe|par)\s+(?:youtube|yt)$/i) ||
+    raw.match(/^(?:youtube|yt)\s+(?:pe|par)\s+(.+?)\s+(?:chalao|play|search|kholo)$/i) ||
+    raw.match(/^(?:open|kholo)\s+(?:youtube|yt)$/i);
+  if (ytMatch) {
+    return {
+      matched: true,
+      result: executeVoiceToolCall(
+        "open_youtube",
+        { query: (ytMatch[1] || "").trim() },
+        pendingWhatsApp
+      ),
+    };
+  }
+
+  // Spotify
+  const spotifyMatch =
+    raw.match(/^(?:play|search|chalao|suno)\s+(.+?)\s+(?:on|pe|par)\s+spotify$/i) ||
+    raw.match(/^spotify\s+(?:pe|par)\s+(.+?)\s+(?:chalao|play|search|kholo)$/i) ||
+    raw.match(/^(?:open|kholo)\s+spotify$/i);
+  if (spotifyMatch) {
+    return {
+      matched: true,
+      result: executeVoiceToolCall(
+        "open_spotify",
+        { query: (spotifyMatch[1] || "").trim() },
+        pendingWhatsApp
+      ),
+    };
+  }
+
+  // Google Search
+  const googleMatch =
+    raw.match(/^(?:google|search)\s+(?:for\s+)?(.+?)(?:\s+on\s+google)?$/i) ||
+    raw.match(/^google\s+(?:pe|par)\s+(.+?)\s+(?:search|dhundo|kholo)$/i);
+  if (googleMatch && googleMatch[1]) {
+    return {
+      matched: true,
+      result: executeVoiceToolCall(
+        "google_search",
+        { query: googleMatch[1].trim() },
+        pendingWhatsApp
+      ),
+    };
+  }
+
+  // General website
+  const openMatch = raw.match(/^(?:open|kholo)\s+([a-zA-Z0-9._\-\s]+)$/i);
+  if (openMatch && openMatch[1]) {
+    return {
+      matched: true,
+      result: executeVoiceToolCall(
+        "open_website",
+        { site: openMatch[1].trim() },
+        pendingWhatsApp
+      ),
+    };
+  }
+
+  return { matched: false };
 }

@@ -11,6 +11,13 @@ import SpecificationModal from "./components/SpecificationModal";
 import TopicScriptModal from "./components/TopicScriptModal";
 import VoiceSelectorModal from "./components/VoiceSelectorModal";
 import ConnectionErrorModal from "./components/ConnectionErrorModal";
+import VoiceActionOverlay from "./components/VoiceActionOverlay";
+import {
+  VoiceActionEvent,
+  PendingWhatsAppVerification,
+  executeVoiceToolCall,
+  launchExternalUrl,
+} from "./services/voiceActions";
 import { playPCM } from "./utils/audioUtils";
 import { motion, AnimatePresence } from "motion/react";
 import { AppConfig, AppState } from "./types";
@@ -141,10 +148,35 @@ CRITICAL HUMAN-LIKE RULES:
     }
   });
 
+  const [activeAction, setActiveAction] = useState<VoiceActionEvent | null>(null);
+  const [pendingWhatsApp, setPendingWhatsApp] = useState<PendingWhatsAppVerification | null>(null);
+  const pendingWhatsAppRef = useRef<PendingWhatsAppVerification | null>(null);
+  const actionDismissTimerRef = useRef<any>(null);
+
   const liveSessionRef = useRef<LiveSessionManager | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const bgVideoRef = useRef<HTMLVideoElement>(null);
   const mainVideoRef = useRef<HTMLVideoElement>(null);
+
+  const triggerVoiceAction = useCallback((action: VoiceActionEvent) => {
+    const autoLaunched = launchExternalUrl(action.url);
+    setActiveAction({ ...action, autoLaunched });
+
+    if (actionDismissTimerRef.current) {
+      clearTimeout(actionDismissTimerRef.current);
+    }
+    actionDismissTimerRef.current = setTimeout(() => {
+      setActiveAction((prev) => (prev?.id === action.id ? null : prev));
+    }, 15000);
+  }, []);
+
+  const syncPendingWhatsApp = useCallback((next: PendingWhatsAppVerification | null) => {
+    pendingWhatsAppRef.current = next;
+    setPendingWhatsApp(next);
+    if (liveSessionRef.current) {
+      liveSessionRef.current.setPendingWhatsApp(next);
+    }
+  }, []);
 
   // Synchronize video background with assistant session:
   // The video only plays when the assistant is active (listening/speaking/processing).
@@ -282,15 +314,28 @@ CRITICAL HUMAN-LIKE RULES:
 
     setAppState("processing");
 
-    // 1. Check for browser commands
-    const commandResult = processCommand(finalTranscript);
+    // 1. Check for direct browser commands / WhatsApp confirmation
+    const commandResult = processCommand(finalTranscript, pendingWhatsAppRef.current);
 
     let responseText = "";
 
-    if (commandResult.isBrowserAction) {
-      responseText = commandResult.action;
-      setMessages((prev) => [...prev, { id: Date.now().toString() + "-z", sender: "zoya", text: responseText }]);
-      
+    if (commandResult.matched && commandResult.result) {
+      const execResult = commandResult.result;
+      if (execResult.pendingWhatsApp) {
+        syncPendingWhatsApp(execResult.pendingWhatsApp);
+      } else if (execResult.clearPendingWhatsApp) {
+        syncPendingWhatsApp(null);
+      }
+      if (execResult.action) {
+        triggerVoiceAction(execResult.action);
+      }
+
+      responseText = execResult.fallbackReply || "Ji bilkul! Maine kar diya hai.";
+      setMessages((prev) => [
+        ...prev,
+        { id: Date.now().toString() + "-z", sender: "zoya", text: responseText },
+      ]);
+
       if (!isMuted) {
         setAppState("speaking");
         const audioBase64 = await getZoyaAudio(responseText, config);
@@ -298,19 +343,43 @@ CRITICAL HUMAN-LIKE RULES:
           await playPCM(audioBase64, isMuted ? 0 : volume);
         }
       }
-
       setAppState("idle");
-
-      setTimeout(() => {
-        if (commandResult.url) {
-          window.open(commandResult.url, "_blank");
-        }
-      }, 1500);
     } else {
-      // 2. General Chit-Chat via Gemini
-      responseText = await getZoyaResponse(finalTranscript, messagesRef.current, config);
-      setMessages((prev) => [...prev, { id: Date.now().toString() + "-z", sender: "zoya", text: responseText }]);
-      
+      // 2. General Chit-Chat & Tool-Assisted Commands via Gemini
+      const chatResult = await getZoyaResponse(finalTranscript, messagesRef.current, config);
+      let fallbackActionReply = "";
+
+      if (chatResult.functionCalls.length > 0) {
+        for (const call of chatResult.functionCalls) {
+          const execResult = executeVoiceToolCall(
+            call.name,
+            call.args || {},
+            pendingWhatsAppRef.current
+          );
+          if (execResult.pendingWhatsApp) {
+            syncPendingWhatsApp(execResult.pendingWhatsApp);
+          } else if (execResult.clearPendingWhatsApp) {
+            syncPendingWhatsApp(null);
+          }
+          if (execResult.action) {
+            triggerVoiceAction(execResult.action);
+          }
+          if (execResult.fallbackReply) {
+            fallbackActionReply = execResult.fallbackReply;
+          }
+        }
+      }
+
+      responseText =
+        chatResult.text.trim() ||
+        fallbackActionReply ||
+        "Haan ji, main yahin hoon aapke sath.";
+
+      setMessages((prev) => [
+        ...prev,
+        { id: Date.now().toString() + "-z", sender: "zoya", text: responseText },
+      ]);
+
       if (!isMuted) {
         setAppState("speaking");
         const audioBase64 = await getZoyaAudio(responseText, config);
@@ -320,10 +389,13 @@ CRITICAL HUMAN-LIKE RULES:
       }
       setAppState("idle");
     }
-  }, [isMuted, volume, isSessionActive, config]);
+  }, [isMuted, volume, isSessionActive, config, syncPendingWhatsApp, triggerVoiceAction]);
 
   useEffect(() => {
     return () => {
+      if (actionDismissTimerRef.current) {
+        clearTimeout(actionDismissTimerRef.current);
+      }
       if (liveSessionRef.current) {
         liveSessionRef.current.stop();
       }
@@ -385,10 +457,13 @@ CRITICAL HUMAN-LIKE RULES:
         setMessages((prev) => [...prev, { id: Date.now().toString() + "-" + sender, sender, text }]);
       };
       
-      session.onCommand = (url) => {
-        setTimeout(() => {
-          window.open(url, "_blank");
-        }, 1000);
+      session.onAction = (action) => {
+        triggerVoiceAction(action);
+      };
+
+      session.onPendingWhatsAppChange = (pending) => {
+        pendingWhatsAppRef.current = pending;
+        setPendingWhatsApp(pending);
       };
 
       session.onAudioLevel = (level) => {
@@ -949,6 +1024,52 @@ CRITICAL HUMAN-LIKE RULES:
           onClose={() => setShowTopicModal(false)}
         />
       )}
+      {/* Voice Action & WhatsApp Verification Overlay */}
+      <VoiceActionOverlay
+        activeAction={activeAction}
+        pendingWhatsApp={pendingWhatsApp}
+        onDismissAction={() => setActiveAction(null)}
+        onConfirmWhatsApp={(confirmed) => {
+          syncPendingWhatsApp(null);
+          setActiveAction({
+            id: `${Date.now()}-wa`,
+            toolName: "confirm_and_open_whatsapp",
+            title: confirmed.recipientName
+              ? `WhatsApp: ${confirmed.recipientName}`
+              : `WhatsApp: ${confirmed.displayPhone}`,
+            subtitle: `${confirmed.displayPhone} • "${confirmed.message}"`,
+            url: confirmed.url,
+            category: "whatsapp",
+            recipientName: confirmed.recipientName,
+            phoneNumber: confirmed.displayPhone,
+            messageText: confirmed.message,
+            autoLaunched: true,
+            timestamp: Date.now(),
+          });
+          if (liveSessionRef.current && isSessionActive) {
+            liveSessionRef.current.sendText(
+              `[SYSTEM: User verified and opened WhatsApp Web for ${confirmed.displayPhone} with message "${confirmed.message}". Acknowledge briefly and warmly.]`
+            );
+          }
+        }}
+        onCancelWhatsApp={() => {
+          syncPendingWhatsApp(null);
+          if (liveSessionRef.current && isSessionActive) {
+            liveSessionRef.current.sendText(
+              "[SYSTEM: User cancelled the WhatsApp message draft. Acknowledge briefly.]"
+            );
+          }
+        }}
+        onUpdatePendingWhatsApp={(updated) => {
+          syncPendingWhatsApp(updated);
+          if (liveSessionRef.current && isSessionActive) {
+            liveSessionRef.current.sendText(
+              `[SYSTEM: User edited the WhatsApp draft on screen to phone ${updated.displayPhone} and message "${updated.message}". Ask them if they'd like to confirm and open WhatsApp now.]`
+            );
+          }
+        }}
+      />
+
       {/* Voice Selection Modal */}
       {showVoiceModal && (
         <VoiceSelectorModal

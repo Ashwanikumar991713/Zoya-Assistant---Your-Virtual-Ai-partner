@@ -1,4 +1,19 @@
 import { AppConfig } from "../types";
+import {
+  VOICE_ACTION_DECLARATIONS,
+  VOICE_ACTION_PROMPT_DIRECTIVE,
+} from "./voiceActions";
+
+export interface ZoyaFunctionCall {
+  id?: string;
+  name: string;
+  args?: Record<string, any>;
+}
+
+export interface ZoyaChatResult {
+  text: string;
+  functionCalls: ZoyaFunctionCall[];
+}
 
 export function resetZoyaSession() {
   // Session reset signal handled in conversation state
@@ -27,7 +42,12 @@ Never speak in a male, robotic, or deep voice. Maintain your soft, warm, feminin
 Naturally weave this into your conversation in your own sweet, casual speaking style without reciting lines robotically.`;
   }
 
-  return baseInstruction + strictPersonaInstruction + topicContext;
+  return (
+    baseInstruction +
+    strictPersonaInstruction +
+    VOICE_ACTION_PROMPT_DIRECTIVE +
+    topicContext
+  );
 }
 
 function formatConversationContents(
@@ -71,7 +91,7 @@ export async function getZoyaResponse(
   prompt: string,
   history: { sender: "user" | "zoya"; text: string }[] = [],
   config: AppConfig
-): Promise<string> {
+): Promise<ZoyaChatResult> {
   try {
     const res = await fetch("/api/gemini/chat", {
       method: "POST",
@@ -92,14 +112,20 @@ export async function getZoyaResponse(
     const contentType = res.headers.get("content-type") || "";
     if (res.ok && contentType.includes("application/json")) {
       const data = await res.json();
-      return data.text || "Haan ji, main yahin hoon aapke sath.";
+      return {
+        text: data.text || "",
+        functionCalls: Array.isArray(data.functionCalls) ? data.functionCalls : [],
+      };
     }
 
     // Static hosting fallback (e.g., Vercel without Express server) when user provided their own key
     const cleanKey = (config.apiKey || "").trim();
-    if ((res.status === 404 || res.status === 405 || !contentType.includes("application/json")) && cleanKey) {
+    if (
+      (res.status === 404 || res.status === 405 || !contentType.includes("application/json")) &&
+      cleanKey
+    ) {
       const directRes = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${encodeURIComponent(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-4-hydrogen:generateContent?key=${encodeURIComponent(
           cleanKey
         )}`,
         {
@@ -109,6 +135,7 @@ export async function getZoyaResponse(
             systemInstruction: {
               parts: [{ text: buildChatSystemInstruction(config) }],
             },
+            tools: [{ functionDeclarations: VOICE_ACTION_DECLARATIONS }],
             contents: formatConversationContents(history, prompt),
           }),
         }
@@ -116,20 +143,44 @@ export async function getZoyaResponse(
 
       if (directRes.ok) {
         const directData = await directRes.json();
-        const text = directData?.candidates?.[0]?.content?.parts?.[0]?.text;
-        return text || "Haan ji, main yahin hoon aapke sath.";
+        const parts = directData?.candidates?.[0]?.content?.parts || [];
+        const text = parts
+          .filter((p: any) => typeof p.text === "string")
+          .map((p: any) => p.text)
+          .join(" ")
+          .trim();
+        const functionCalls: ZoyaFunctionCall[] = parts
+          .filter((p: any) => p.functionCall)
+          .map((p: any) => ({
+            id: p.functionCall.id,
+            name: p.functionCall.name,
+            args: p.functionCall.args || {},
+          }));
+
+        return {
+          text,
+          functionCalls,
+        };
       }
     }
 
-    const errData = contentType.includes("application/json") ? await res.json().catch(() => ({})) : {};
+    const errData = contentType.includes("application/json")
+      ? await res.json().catch(() => ({}))
+      : {};
     throw new Error(errData.error || `Server responded with status ${res.status}`);
   } catch (error) {
     console.error("Gemini Chat Error:", error);
-    return "Thoda sa network issue ho gaya hai, ek baar dobara boliye na.";
+    return {
+      text: "Thoda sa network issue ho gaya hai, ek baar dobara boliye na.",
+      functionCalls: [],
+    };
   }
 }
 
-export async function getZoyaAudio(text: string, config: AppConfig): Promise<string | null> {
+export async function getZoyaAudio(
+  text: string,
+  config: AppConfig
+): Promise<string | null> {
   try {
     const res = await fetch("/api/gemini/tts", {
       method: "POST",
@@ -151,7 +202,10 @@ export async function getZoyaAudio(text: string, config: AppConfig): Promise<str
 
     // Static hosting fallback (e.g., Vercel without Express server) when user provided their own key
     const cleanKey = (config.apiKey || "").trim();
-    if ((res.status === 404 || res.status === 405 || !contentType.includes("application/json")) && cleanKey) {
+    if (
+      (res.status === 404 || res.status === 405 || !contentType.includes("application/json")) &&
+      cleanKey
+    ) {
       const validFemaleVoices = ["Kore", "Aoede"];
       const rawVoice = (config.voiceName || "").trim();
       const voiceToUse = validFemaleVoices.includes(rawVoice) ? rawVoice : "Kore";
