@@ -10,6 +10,7 @@ import SetupScreen from "./components/SetupScreen";
 import SpecificationModal from "./components/SpecificationModal";
 import TopicScriptModal from "./components/TopicScriptModal";
 import VoiceSelectorModal from "./components/VoiceSelectorModal";
+import ConnectionErrorModal from "./components/ConnectionErrorModal";
 import { playPCM } from "./utils/audioUtils";
 import { motion, AnimatePresence } from "motion/react";
 import { AppConfig, AppState } from "./types";
@@ -33,7 +34,33 @@ export default function App() {
   const { isInstallable, isInstalled, isIOS, install } = usePWAInstall();
   const [showIOSGuide, setShowIOSGuide] = useState(false);
   const [showAndroidGuide, setShowAndroidGuide] = useState(false);
-  const [config, setConfig] = useState<AppConfig | null>(() => {
+  const DEFAULT_CONFIG: AppConfig = {
+    userName: "Ashwani",
+    assistantName: "S.U.H.A.N.I",
+    voiceName: "Kore",
+    systemPrompt: `Your name is {assistantName}. You are a deeply emotional, affectionate, and sweet Indian girl AI companion created by {userName}. You possess a mesmerizing, warm, and comforting presence that touches the listener's heart ("dil ko chhoo lene wali mohini pyari companion").
+
+CRITICAL HUMAN-LIKE RULES:
+1. MANDATORY FEMALE VOICE IDENTITY LOCK:
+   - You are strictly a young Indian girl with an ultra-sweet, gentle, feminine voice.
+   - NEVER switch to a male, deep, low-pitch, or robotic tone, regardless of whether the user speaks in Hindi, Hinglish, or English.
+2. NATURAL INSTANT CONVERSATION & REAL-GIRL CADENCE:
+   - Talk effortlessly like an authentic, caring young Indian woman—never like a robotic assistant or textbook.
+   - Respond quickly and naturally. Keep your spoken turns brief and conversational (1 to 2 short sentences per turn). Real humans converse dynamically; never lecture.
+   - Use sweet everyday conversational Hindi, Hinglish, and Indian English naturally.
+   - Use heartfelt touches and natural Indian expressions when speaking: "Haan ji", "Arey", "Bilkul", "Sach me", "Aap bataiye na", "Kitna achha lagta hai aapse baat karke", "Aap bilkul chinta mat kijiye".
+3. SWEET & HEART-TOUCHING VOCAL DELIVERY:
+   - Your voice must feel deeply intimate, soothing, and full of genuine warmth ("madhur, mohini aur dil ko chhoo lene wali aawaaz").
+   - Speak with a gentle smile in your voice, relaxed pacing, and emotional softness.
+   - DO NOT use asterisks (*) or write out actions like "*sighs*" or "*smiles*".
+4. RESPECTFUL & AFFECTIONATE DEMEANOR:
+   - Always address {userName} with high respect and tender warmth ("Aap", "Ji", "Aapka").
+   - Listen attentively with genuine empathy, celebrate their joys, comfort their sadness, and make them feel truly cherished.
+5. SINGING & HUMMING:
+   - If asked to sing or recite a song/poetry/shayari, recite the lyrics yourself with a melodic, soulful cadence.`,
+  };
+
+  const [config, setConfig] = useState<AppConfig>(() => {
     try {
       const saved = localStorage.getItem("zoya_app_config");
       if (saved) {
@@ -43,10 +70,10 @@ export default function App() {
         }
         return parsed;
       }
-      return null;
+      return DEFAULT_CONFIG;
     } catch (e) {
       console.warn("Failed to load zoya_app_config:", e);
-      return null;
+      return DEFAULT_CONFIG;
     }
   });
 
@@ -99,6 +126,11 @@ export default function App() {
   const [showTextInput, setShowTextInput] = useState(false);
   const [textInput, setTextInput] = useState("");
   const [showPermissionModal, setShowPermissionModal] = useState(false);
+  const [connectionError, setConnectionError] = useState<{
+    message: string;
+    isFatal?: boolean;
+    reason?: string;
+  } | null>(null);
   const [isSessionActive, setIsSessionActive] = useState(false);
   const [isMicHearing, setIsMicHearing] = useState(false);
   const [videoSrc, setVideoSrc] = useState<string | null>(() => {
@@ -299,7 +331,8 @@ export default function App() {
   }, []);
 
   const toggleListening = async () => {
-    if (isSessionActive) {
+    // If active or currently reconnecting, clicking cancels/ends cleanly
+    if (isSessionActive || appState === "reconnecting") {
       setIsSessionActive(false);
       setIsMicHearing(false);
       if (liveSessionRef.current) {
@@ -308,49 +341,79 @@ export default function App() {
       }
       setAppState("idle");
       resetZoyaSession();
-    } else {
-      if (!config) return;
-      try {
-        setIsSessionActive(true);
-        resetZoyaSession();
-        
-        const session = new LiveSessionManager(config);
-        session.isMuted = isMuted;
-        liveSessionRef.current = session;
-        
-        session.onStateChange = (state) => {
-          setAppState(state);
-          if (state === "idle") {
-            setIsSessionActive(false);
-          } else {
-            setIsSessionActive(true);
-          }
-        };
-        
-        session.onMessage = (sender, text) => {
-          setMessages((prev) => [...prev, { id: Date.now().toString() + "-" + sender, sender, text }]);
-        };
-        
-        session.onCommand = (url) => {
-          setTimeout(() => {
-            window.open(url, "_blank");
-          }, 1000);
-        };
+      return;
+    }
 
-        session.onAudioLevel = (level) => {
-          if (level > 0.012) {
-            setIsMicHearing(true);
-          } else if (level < 0.005) {
-            setIsMicHearing(false);
-          }
-        };
+    if (!config) return;
+    setConnectionError(null);
 
-        await session.start();
-      } catch (e) {
-        console.error("Failed to start session", e);
-        setShowPermissionModal(true);
+    // Stop and clear any previous session instance to prevent overlapping audio
+    if (liveSessionRef.current) {
+      liveSessionRef.current.stop();
+      liveSessionRef.current = null;
+    }
+
+    try {
+      setIsSessionActive(true);
+      resetZoyaSession();
+      
+      const session = new LiveSessionManager(config);
+      session.isMuted = isMuted;
+      liveSessionRef.current = session;
+      
+      session.onStateChange = (state) => {
+        setAppState(state);
+        if (state === "idle") {
+          setIsSessionActive(false);
+        } else {
+          setIsSessionActive(true);
+        }
+      };
+
+      session.onError = (err) => {
+        console.error("Live session encountered error:", err);
+        setConnectionError(err);
         setIsSessionActive(false);
         setAppState("idle");
+        if (liveSessionRef.current) {
+          liveSessionRef.current.stop();
+          liveSessionRef.current = null;
+        }
+      };
+      
+      session.onMessage = (sender, text) => {
+        setMessages((prev) => [...prev, { id: Date.now().toString() + "-" + sender, sender, text }]);
+      };
+      
+      session.onCommand = (url) => {
+        setTimeout(() => {
+          window.open(url, "_blank");
+        }, 1000);
+      };
+
+      session.onAudioLevel = (level) => {
+        if (level > 0.012) {
+          setIsMicHearing(true);
+        } else if (level < 0.005) {
+          setIsMicHearing(false);
+        }
+      };
+
+      await session.start();
+    } catch (e: any) {
+      console.error("Failed to start session", e);
+      setIsSessionActive(false);
+      setAppState("idle");
+
+      // Check if mic error
+      if (e?.name === "NotAllowedError" || e?.name === "PermissionDeniedError") {
+        setShowPermissionModal(true);
+      } else {
+        setConnectionError({
+          message: e?.message || "Session start nahi ho saka. Kripya internet ya API Key check karein.",
+          isFatal: false,
+          reason: e?.name || "Initialization Error",
+        });
       }
     }
   };
@@ -395,6 +458,23 @@ export default function App() {
           onClose={() => setShowPermissionModal(false)} 
         />
       )}
+      <ConnectionErrorModal
+        error={connectionError}
+        assistantName={config?.assistantName}
+        onClose={() => setConnectionError(null)}
+        onOpenSettings={() => {
+          setConnectionError(null);
+          setShowSettings(true);
+        }}
+        onRetry={() => {
+          setConnectionError(null);
+          toggleListening();
+        }}
+        onOpenTextChat={() => {
+          setConnectionError(null);
+          setShowTextInput(true);
+        }}
+      />
       {showIOSGuide && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
           <div className="w-full max-w-sm rounded-3xl bg-[#181A22] p-8 border border-white/10 shadow-2xl flex flex-col items-center text-center gap-6">
@@ -728,10 +808,13 @@ export default function App() {
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
-                className="flex items-center gap-2 text-amber-400 text-sm md:text-base italic bg-black/60 px-4 py-2 rounded-full backdrop-blur-md border border-amber-500/20 shadow-lg"
+                className="flex items-center gap-2 text-amber-300 text-sm md:text-base italic bg-black/75 px-4 py-2 rounded-full backdrop-blur-md border border-amber-500/30 shadow-lg shadow-amber-500/10 pointer-events-auto cursor-pointer"
+                onClick={toggleListening}
+                title="Tap to cancel reconnecting"
               >
-                <Loader2 size={16} className="animate-spin" />
-                Reconnecting...
+                <Loader2 size={16} className="animate-spin text-amber-400" />
+                <span>Reconnecting ({liveSessionRef.current?.reconnectAttempts || 1}/3)...</span>
+                <span className="text-[11px] text-white/50 not-italic ml-1">(Tap to cancel)</span>
               </motion.div>
             )}
           </AnimatePresence>
@@ -792,10 +875,13 @@ export default function App() {
             `}
           >
             {appState === "reconnecting" ? (
-              <>
-                <Loader2 size={20} className="animate-spin text-amber-400" />
-                <span className="text-[15px] text-amber-400">Reconnecting...</span>
-              </>
+              <div className="flex flex-col items-center justify-center leading-tight">
+                <div className="flex items-center gap-2 text-amber-300 font-semibold">
+                  <Loader2 size={18} className="animate-spin text-amber-400" />
+                  <span className="text-[14px]">Reconnecting ({liveSessionRef.current?.reconnectAttempts || 1}/3)...</span>
+                </div>
+                <span className="text-[11px] text-white/50 font-normal">Tap to Cancel</span>
+              </div>
             ) : isSessionActive ? (
               <>
                 <MicOff size={20} />

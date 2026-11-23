@@ -1,5 +1,5 @@
 export interface AppConfig {
-  apiKey: string;
+  apiKey?: string;
   userName: string;
   assistantName: string;
   systemPrompt: string;

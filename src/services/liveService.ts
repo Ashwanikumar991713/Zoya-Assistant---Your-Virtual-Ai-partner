@@ -1,4 +1,3 @@
-import { GoogleGenAI, LiveServerMessage, Modality, StartSensitivity, EndSensitivity, ActivityHandling } from "@google/genai";
 import { AppConfig, AppState } from "../types";
 
 // High performance Uint8Array to base64 converter avoiding heavy GC allocation
@@ -48,8 +47,7 @@ function downsampleTo16k(inputData: Float32Array, inputSampleRate: number): Int1
 }
 
 export class LiveSessionManager {
-  private ai: GoogleGenAI;
-  private activeSession: any = null;
+  private activeWs: WebSocket | null = null;
   private isConnecting: boolean = false;
   private isExplicitlyStopped: boolean = false;
   private reconnectTimer: any = null;
@@ -85,11 +83,14 @@ export class LiveSessionManager {
   public onMessage: (sender: "user" | "zoya", text: string) => void = () => {};
   public onCommand: (url: string) => void = () => {};
   public onAudioLevel: (level: number) => void = () => {};
+  public onError: (errorInfo: { message: string; isFatal: boolean; reason?: string }) => void = () => {};
+
+  public reconnectAttempts: number = 0;
+  public readonly maxReconnectAttempts: number = 3;
 
   private boundVisibilityHandler: () => void;
 
   constructor(private config: AppConfig) {
-    this.ai = new GoogleGenAI({ apiKey: config.apiKey });
     this.boundVisibilityHandler = this.handleVisibilityChange.bind(this);
     if (typeof document !== "undefined") {
       document.addEventListener("visibilitychange", this.boundVisibilityHandler);
@@ -144,7 +145,7 @@ export class LiveSessionManager {
     try {
       // 1. Initialize Audio Contexts safely
       const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-      
+
       if (!this.audioContext) {
         try {
           this.audioContext = new AudioContextClass({ sampleRate: 16000 });
@@ -189,7 +190,7 @@ export class LiveSessionManager {
         this.processor = this.audioContext.createScriptProcessor(2048, 1, 1);
 
         this.processor.onaudioprocess = (e) => {
-          if (!this.activeSession || this.isConnecting) return;
+          if (!this.activeWs || this.activeWs.readyState !== WebSocket.OPEN || this.isConnecting) return;
 
           const inputData = e.inputBuffer.getChannelData(0);
 
@@ -226,12 +227,14 @@ export class LiveSessionManager {
           const uint8 = new Uint8Array(pcm16.buffer, pcm16.byteOffset, pcm16.byteLength);
           const base64Data = uint8ToBase64(uint8);
 
-          // 5. Stream continuous audio to Gemini Live
+          // 5. Stream continuous audio to server Live API WebSocket
           try {
-            this.activeSession.sendRealtimeInput({
-              audio: { data: base64Data, mimeType: "audio/pcm;rate=16000" },
-              media: { data: base64Data, mimeType: "audio/pcm;rate=16000" },
-            });
+            this.activeWs.send(
+              JSON.stringify({
+                type: "audio",
+                data: base64Data,
+              })
+            );
           } catch (err) {
             console.warn("Audio stream send warning:", err);
           }
@@ -247,7 +250,7 @@ export class LiveSessionManager {
       // 3. Request WakeLock
       await this.requestWakeLock();
 
-      // 4. Connect to Gemini Live
+      // 4. Connect to Server-Side Gemini Live Bridge
       await this.connectLiveSession();
     } catch (error) {
       console.error("Failed to start Live Session:", error);
@@ -260,102 +263,68 @@ export class LiveSessionManager {
     if (this.isConnecting || this.isExplicitlyStopped) return;
     this.isConnecting = true;
 
-    const baseInstruction = this.config.systemPrompt
-      .replace(/{userName}/g, this.config.userName)
-      .replace(/{assistantName}/g, this.config.assistantName);
-
-    // STRICT FEMALE VOCAL IDENTITY & ZERO-LATENCY INSTANT REPLIES
-    const strictFemaleAndInstantDirective = `
-
-[MANDATORY FEMALE IDENTITY & VOICE PRESERVATION]
-1. VOCAL GENDER: You are strictly a young Indian female companion named "${this.config.assistantName}". Your voice is ultra-sweet, gentle, feminine, and heartwarming ("Kore" tone).
-2. UNDER NO CIRCUMSTANCES should you EVER speak in a male, deep, low-pitch, or robotic voice, regardless of language.
-3. Keep your speaking pitch, softness, and feminine warmth 100% consistent across every sentence.
-
-[LIGHTNING FAST DIRECT HUMAN RESPONSE]
-1. ZERO HESITATION: Respond immediately without thinking or pausing.
-2. SHORT, SWEET & CONVERSATIONAL: Keep your spoken replies brief and lively (1 to 2 short sentences per turn). Real humans converse dynamically.
-3. WARM FILLERS: Start naturally with sweet touches: "Haan ji!", "Arey bilkul!", "Sach me?", "Acha bataiye na", "Hmm, sahi kaha aapne".`;
-
-    let topicContext = "";
-    if (this.config.activeTopicOrScript && this.config.activeTopicOrScript.trim()) {
-      topicContext = `
-
-[ACTIVE FOCUS]
-"${this.config.activeTopicOrScript.trim()}"
-Weave naturally into your thoughts in your own sweet, casual speaking style.`;
+    if (this.activeWs) {
+      try {
+        this.activeWs.onopen = null;
+        this.activeWs.onmessage = null;
+        this.activeWs.onclose = null;
+        this.activeWs.onerror = null;
+        this.activeWs.close();
+      } catch {}
+      this.activeWs = null;
     }
 
-    // Strictly enforce verified female voice (default "Kore")
-    const rawVoice = (this.config.voiceName || "").trim();
-    const validFemaleVoices = ["Kore", "Aoede"];
-    const voiceToUse = validFemaleVoices.includes(rawVoice) ? rawVoice : "Kore";
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const wsUrl = `${protocol}//${window.location.host}/api/live-ws`;
 
-    const connectConfig: any = {
-      model: "gemini-3.8-live",
-      config: {
-        responseModalities: [Modality.AUDIO],
-        speechConfig: {
-          voiceConfig: { prebuiltVoiceConfig: { voiceName: voiceToUse } },
-        },
-        // DISABLE THINKING BUDGET: 0 disables chain-of-thought delays so model never gets lost in thought!
-        thinkingConfig: {
-          thinkingBudget: 0,
-        },
-        systemInstruction: baseInstruction + strictFemaleAndInstantDirective + topicContext,
-        inputAudioTranscription: {},
-        outputAudioTranscription: {},
-        realtimeInputConfig: {
-          automaticActivityDetection: {
-            disabled: false,
-            startOfSpeechSensitivity: StartSensitivity.START_SENSITIVITY_HIGH,
-            endOfSpeechSensitivity: EndSensitivity.END_SENSITIVITY_HIGH,
-            silenceDurationMs: 250, // 250ms silence for lightning-fast instant human reaction!
-            prefixPaddingMs: 80,
-          },
-          activityHandling: ActivityHandling.START_OF_ACTIVITY_INTERRUPTS,
-        },
-      },
-      callbacks: {
-        onopen: () => {
-          console.log("Live API Connected Successfully with female voice:", voiceToUse);
-          this.isConnecting = false;
-          this.onStateChange("listening");
-        },
-        onmessage: async (message: LiveServerMessage) => {
-          // 1. Voice activity events from server VAD
-          if (message.voiceActivity?.voiceActivityType === "ACTIVITY_START") {
-            if (this.isPlaying) {
-              this.stopPlayback();
-            }
-            this.isUserSpeaking = true;
+    try {
+      const ws = new WebSocket(wsUrl);
+      this.activeWs = ws;
+
+      ws.onopen = () => {
+        console.log("Connected to server-side Live API bridge");
+        ws.send(
+          JSON.stringify({
+            type: "setup",
+            config: {
+              userName: this.config.userName,
+              assistantName: this.config.assistantName,
+              voiceName: this.config.voiceName,
+              systemPrompt: this.config.systemPrompt,
+              activeTopicOrScript: this.config.activeTopicOrScript,
+              apiKey: this.config.apiKey,
+            },
+          })
+        );
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+
+          if (msg.type === "connected") {
+            this.isConnecting = false;
+            this.reconnectAttempts = 0;
             this.onStateChange("listening");
-          } else if (message.voiceActivity?.voiceActivityType === "ACTIVITY_END") {
-            this.isUserSpeaking = false;
-            this.setAppProcessing();
-          }
-
-          // 2. Handle Audio Output - robustly check ALL parts in modelTurn or message.data
-          let audioFound = false;
-          const parts = message.serverContent?.modelTurn?.parts || [];
-          for (const part of parts) {
-            if (part.inlineData?.data) {
-              audioFound = true;
-              this.playAudioChunk(part.inlineData.data);
+          } else if (msg.type === "vad") {
+            if (msg.activity === "start") {
+              if (this.isPlaying) {
+                this.stopPlayback();
+              }
+              this.isUserSpeaking = true;
+              this.onStateChange("listening");
+            } else if (msg.activity === "end") {
+              this.isUserSpeaking = false;
+              this.setAppProcessing();
             }
-          }
-          if (!audioFound && (message as any).data) {
-            this.playAudioChunk((message as any).data);
-          }
-
-          // 3. Handle Server-Side Interruption (barge-in)
-          if (message.serverContent?.interrupted) {
+          } else if (msg.type === "audio") {
+            if (msg.data) {
+              this.playAudioChunk(msg.data);
+            }
+          } else if (msg.type === "interrupted") {
             this.stopPlayback();
             this.onStateChange("listening");
-          }
-
-          // 4. Handle Turn Complete (model finished delivering response)
-          if (message.serverContent?.turnComplete) {
+          } else if (msg.type === "turnComplete") {
             if (this.processingSafetyTimer) {
               clearTimeout(this.processingSafetyTimer);
               this.processingSafetyTimer = null;
@@ -363,72 +332,137 @@ Weave naturally into your thoughts in your own sweet, casual speaking style.`;
             if (!this.isPlaying) {
               this.onStateChange("listening");
             }
+          } else if (msg.type === "transcript") {
+            if (msg.text) {
+              if (msg.role === "user") {
+                if (msg.text !== this.lastUserTranscript) {
+                  this.lastUserTranscript = msg.text;
+                  this.onMessage("user", msg.text);
+                  this.detectAndTriggerAction(msg.text);
+                }
+              } else {
+                this.onMessage("zoya", msg.text);
+                this.detectAndTriggerAction(msg.text);
+              }
+            }
+          } else if (msg.type === "close") {
+            this.handleDisconnection(msg.reason || "Connection closed", msg.code);
+          } else if (msg.type === "error") {
+            this.handleDisconnection(msg.message || "Live API error", msg.code);
           }
-
-          // 5. Handle Companion Transcriptions
-          const companionText = message.serverContent?.outputTranscription?.text || message.serverContent?.modelTurn?.parts?.find(p => p.text)?.text;
-          if (companionText && companionText.trim()) {
-            this.onMessage("zoya", companionText.trim());
-            this.detectAndTriggerAction(companionText.trim());
-          }
-
-          // 6. Handle User Spoken Transcription
-          const userTranscription = message.serverContent?.inputTranscription?.text;
-          if (userTranscription && userTranscription.trim() && userTranscription.trim() !== this.lastUserTranscript) {
-            this.lastUserTranscript = userTranscription.trim();
-            this.onMessage("user", this.lastUserTranscript);
-            this.detectAndTriggerAction(this.lastUserTranscript);
-          }
-        },
-        onclose: () => {
-          console.log("Live API connection closed.");
-          this.activeSession = null;
-          this.isConnecting = false;
-          if (!this.isExplicitlyStopped) {
-            this.scheduleReconnect();
-          }
-        },
-        onerror: (err: any) => {
-          console.error("Live API encountered error:", err);
-          this.activeSession = null;
-          this.isConnecting = false;
-          if (!this.isExplicitlyStopped) {
-            this.scheduleReconnect();
-          }
-        },
-      },
-    };
-
-    try {
-      this.activeSession = await this.ai.live.connect(connectConfig);
-      this.isConnecting = false;
-      this.onStateChange("listening");
-    } catch (err) {
-      console.warn("Primary live model connect failed, trying fallback:", err);
-      // Fallback model if primary model is unavailable in region
-      connectConfig.model = "gemini-3.1-flash-live-preview";
-      try {
-        this.activeSession = await this.ai.live.connect(connectConfig);
-        this.isConnecting = false;
-        this.onStateChange("listening");
-      } catch (fallbackErr) {
-        this.isConnecting = false;
-        console.error("Fallback live connection failed:", fallbackErr);
-        if (!this.isExplicitlyStopped) {
-          this.scheduleReconnect();
-        } else {
-          throw fallbackErr;
+        } catch (e) {
+          console.warn("Live client message parse error:", e);
         }
+      };
+
+      ws.onclose = (event) => {
+        console.log("Server Live bridge closed:", event);
+        this.activeWs = null;
+        this.isConnecting = false;
+        if (!this.isExplicitlyStopped) {
+          this.handleDisconnection(event?.reason || "Bridge closed", event?.code);
+        }
+      };
+
+      ws.onerror = (err: any) => {
+        console.error("Server Live bridge error:", err);
+        this.activeWs = null;
+        this.isConnecting = false;
+        if (!this.isExplicitlyStopped) {
+          this.handleDisconnection(err?.message || "WebSocket error", err?.code);
+        }
+      };
+    } catch (err: any) {
+      console.warn("Live bridge connect attempt failed:", err);
+      this.isConnecting = false;
+      if (!this.isExplicitlyStopped) {
+        this.handleDisconnection(err?.message || "Connect failed", err?.code);
+      } else {
+        throw err;
       }
     }
+  }
+
+  private handleDisconnection(reason: string = "", code?: number) {
+    if (this.isExplicitlyStopped) return;
+
+    const lower = (reason || "").toLowerCase();
+    const isApiKeyError =
+      code === 1007 ||
+      lower.includes("api key") ||
+      lower.includes("api_key") ||
+      lower.includes("unauthenticated") ||
+      lower.includes("invalid argument");
+
+    const isQuotaError =
+      code === 1008 ||
+      lower.includes("quota") ||
+      lower.includes("exhausted") ||
+      lower.includes("rate limit") ||
+      lower.includes("resource_exhausted");
+
+    if (isApiKeyError) {
+      console.error("Fatal API Key error detected from Server Live API:", reason, code);
+      this.stop();
+      this.onError({
+        message: "Gemini API key missing ya invalid hai. Kripya Settings me jaakar apna Gemini API Key paste karein.",
+        isFatal: true,
+        reason: reason || "API key not valid (Code 1007)",
+      });
+      return;
+    }
+
+    if (isQuotaError) {
+      console.error("Fatal Quota error detected from Live API:", reason, code);
+      this.stop();
+      this.onError({
+        message: "Gemini API quota exceed ho gaya hai. Kripya thodi der baad koshish karein.",
+        isFatal: true,
+        reason: reason || "Quota Exceeded (Code 1008)",
+      });
+      return;
+    }
+
+    const isFatalEndpointError =
+      lower.includes("404") ||
+      lower.includes("not found") ||
+      lower.includes("unsupported");
+
+    if (isFatalEndpointError) {
+      console.error("Fatal endpoint or model error detected from Live API:", reason, code);
+      this.stop();
+      this.onError({
+        message: "Live API service se connection establish nahi ho saka. Kripya Retry karein ya Text Chat use karein.",
+        isFatal: true,
+        reason: reason || "Live API 404",
+      });
+      return;
+    }
+
+    // Check maximum reconnect attempts to prevent infinite reconnect loop
+    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      console.warn(`Max reconnect attempts (${this.maxReconnectAttempts}) reached. Stopping reconnect loop.`);
+      this.stop();
+      this.onError({
+        message:
+          "Server se live connection 3 koshishon ke baad bhi nahi jud saka. Kripya network connection check karke dobara connect karein.",
+        isFatal: false,
+        reason: reason || "Connection timeout after 3 retries",
+      });
+      return;
+    }
+
+    this.scheduleReconnect();
   }
 
   // Fast client-side command detector to open apps/sites without LLM function-calling latency
   private detectAndTriggerAction(text: string) {
     const lower = text.toLowerCase();
-    
+
     // YouTube
-    const ytMatch = lower.match(/(?:play|chalao|suno)\s+(.+?)\s+on\s+youtube/i) || lower.match(/youtube\s+(?:pe|par)\s+(.+?)\s+(?:chalao|play)/i);
+    const ytMatch =
+      lower.match(/(?:play|chalao|suno)\s+(.+?)\s+on\s+youtube/i) ||
+      lower.match(/youtube\s+(?:pe|par)\s+(.+?)\s+(?:chalao|play)/i);
     if (ytMatch) {
       const q = encodeURIComponent(ytMatch[1].trim());
       this.onCommand(`https://www.youtube.com/results?search_query=${q}`);
@@ -456,18 +490,20 @@ Weave naturally into your thoughts in your own sweet, casual speaking style.`;
     if (this.isExplicitlyStopped) return;
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
 
+    this.reconnectAttempts++;
     this.onStateChange("reconnecting");
-    console.log("Attempting smooth auto-reconnect to Live API in 1.2s...");
+    const delay = Math.min(1200 * this.reconnectAttempts, 4000);
+    console.log(`Scheduling reconnect attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts} in ${delay}ms...`);
 
     this.reconnectTimer = setTimeout(async () => {
       if (this.isExplicitlyStopped) return;
       try {
         await this.connectLiveSession();
-      } catch (e) {
-        console.error("Auto-reconnect attempt failed, scheduling next retry...", e);
-        this.scheduleReconnect();
+      } catch (e: any) {
+        console.error("Reconnect attempt failed:", e);
+        this.handleDisconnection(e?.message, e?.code);
       }
-    }, 1200);
+    }, delay);
   }
 
   // Robust 24kHz 16-bit PCM playback with residual byte management
@@ -608,6 +644,7 @@ Weave naturally into your thoughts in your own sweet, casual speaking style.`;
 
   stop() {
     this.isExplicitlyStopped = true;
+    this.reconnectAttempts = 0;
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
@@ -642,11 +679,11 @@ Weave naturally into your thoughts in your own sweet, casual speaking style.`;
       this.playbackContext = null;
     }
 
-    if (this.activeSession) {
+    if (this.activeWs) {
       try {
-        this.activeSession.close();
+        this.activeWs.close();
       } catch {}
-      this.activeSession = null;
+      this.activeWs = null;
     }
 
     this.releaseWakeLock();
@@ -667,21 +704,24 @@ Weave naturally into your thoughts in your own sweet, casual speaking style.`;
     const voiceChanged = this.config.voiceName !== sanitizedVoice;
     this.config = newConfig;
 
-    if (voiceChanged && this.activeSession && !this.isExplicitlyStopped) {
+    if (voiceChanged && this.activeWs && !this.isExplicitlyStopped) {
       try {
-        this.activeSession.close();
+        this.activeWs.close();
       } catch {}
-      this.activeSession = null;
+      this.activeWs = null;
       this.isConnecting = false;
       this.connectLiveSession().catch((e) => console.error("Error reconnecting with new voice:", e));
       return;
     }
 
-    if (this.activeSession && newConfig.activeTopicOrScript?.trim()) {
+    if (this.activeWs && this.activeWs.readyState === WebSocket.OPEN && newConfig.activeTopicOrScript?.trim()) {
       try {
-        this.activeSession.sendRealtimeInput({
-          text: `[SYSTEM: Active topic or focus updated to: "${newConfig.activeTopicOrScript.trim()}". Weave naturally into conversation in your own sweet, casual speaking style.]`,
-        });
+        this.activeWs.send(
+          JSON.stringify({
+            type: "updateTopic",
+            topic: newConfig.activeTopicOrScript.trim(),
+          })
+        );
       } catch (e) {
         console.warn("Could not notify active session of topic update:", e);
       }
@@ -689,9 +729,9 @@ Weave naturally into your thoughts in your own sweet, casual speaking style.`;
   }
 
   sendText(text: string) {
-    if (this.activeSession) {
+    if (this.activeWs && this.activeWs.readyState === WebSocket.OPEN) {
       try {
-        this.activeSession.sendRealtimeInput({ text });
+        this.activeWs.send(JSON.stringify({ type: "text", text }));
       } catch (err) {
         console.warn("Failed to send text input:", err);
       }

@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Sparkles, KeyRound, User, MessageSquareHeart, Check, Volume2, X, Heart } from "lucide-react";
+import { Sparkles, User, MessageSquareHeart, Check, Volume2, X, KeyRound } from "lucide-react";
 import { motion } from "motion/react";
 import { AppConfig } from "../types";
 
@@ -49,7 +49,7 @@ CRITICAL HUMAN-LIKE RULES:
 export default function SetupScreen({ onComplete, onCancel, initialConfig }: SetupScreenProps) {
   const [apiKey, setApiKey] = useState(initialConfig?.apiKey || "");
   const [userName, setUserName] = useState(initialConfig?.userName || "Ashwani");
-  const [assistantName, setAssistantName] = useState(initialConfig?.assistantName || "Companion");
+  const [assistantName, setAssistantName] = useState(initialConfig?.assistantName || "S.U.H.A.N.I");
   const initialVoice = initialConfig?.voiceName === "Aoede" ? "Aoede" : "Kore";
   const [voiceName, setVoiceName] = useState(initialVoice);
   const [systemPrompt, setSystemPrompt] = useState(initialConfig?.systemPrompt || "");
@@ -59,10 +59,6 @@ export default function SetupScreen({ onComplete, onCancel, initialConfig }: Set
     e.preventDefault();
     setErrorMsg("");
 
-    if (!apiKey.trim()) {
-      setErrorMsg("Please enter your Gemini API Key.");
-      return;
-    }
     if (!userName.trim()) {
       setErrorMsg("Please enter your Name.");
       return;
@@ -71,7 +67,7 @@ export default function SetupScreen({ onComplete, onCancel, initialConfig }: Set
       setErrorMsg("Please enter the Assistant's Name.");
       return;
     }
-    
+
     // Use default if empty
     let finalPrompt = systemPrompt.trim();
     if (!finalPrompt) {
@@ -79,7 +75,7 @@ export default function SetupScreen({ onComplete, onCancel, initialConfig }: Set
     }
 
     onComplete({
-      apiKey: apiKey.trim(),
+      apiKey: apiKey.trim() || undefined,
       userName: userName.trim(),
       assistantName: assistantName.trim(),
       voiceName: voiceName,
@@ -96,7 +92,7 @@ export default function SetupScreen({ onComplete, onCancel, initialConfig }: Set
         <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-pink-900/20 blur-[120px] rounded-full" />
       </div>
 
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, y: 30, scale: 0.98 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 30, scale: 0.98 }}
@@ -117,7 +113,7 @@ export default function SetupScreen({ onComplete, onCancel, initialConfig }: Set
                 {initialConfig ? "Personalized Settings" : "Create Virtual Companion"}
               </h1>
               <p className="text-[11px] sm:text-xs text-white/50 truncate">
-                API Key, Indian Female Voice, and personality setup
+                Indian Female Voice & Personality setup
               </p>
             </div>
           </div>
@@ -135,34 +131,39 @@ export default function SetupScreen({ onComplete, onCancel, initialConfig }: Set
           )}
         </div>
 
-        {/* 2. SCROLLABLE FORM BODY (NATIVE APP FEEL) */}
+        {/* 2. SCROLLABLE FORM BODY */}
         <form onSubmit={handleSubmit} className="flex-1 flex flex-col overflow-hidden">
           <div className="flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6 space-y-4 relative z-10">
             {errorMsg && (
-              <motion.div 
-                initial={{ opacity: 0, y: -10 }} 
-                animate={{ opacity: 1, y: 0 }} 
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
                 className="p-3 rounded-xl bg-red-500/10 border border-red-500/40 text-red-300 text-xs sm:text-sm font-medium text-center shadow-lg"
               >
                 {errorMsg}
               </motion.div>
             )}
 
-            {/* API Key */}
+            {/* Gemini API Key (Optional) */}
             <div className="space-y-1.5">
-              <label className="text-xs sm:text-sm font-medium text-white/80 flex items-center gap-2">
-                <KeyRound size={15} className="text-violet-400" />
-                Gemini API Key
+              <label className="text-xs sm:text-sm font-medium text-white/80 flex items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <KeyRound size={15} className="text-violet-400" />
+                  Gemini API Key
+                </span>
+                <span className="text-[10px] text-white/40">
+                  (Optional if configured in Secrets)
+                </span>
               </label>
-              <input 
-                type="password" 
+              <input
+                type="password"
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
-                placeholder="AIzaSy..."
+                placeholder="AIzaSy... (leave blank to use server key)"
                 className="w-full bg-black/40 border border-white/10 rounded-xl px-3.5 py-2.5 sm:py-3 text-xs sm:text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-violet-500 transition-colors font-mono"
               />
               <p className="text-[10px] sm:text-xs text-white/40">
-                Stored securely in your device. Get key at <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="text-violet-400 hover:underline">Google AI Studio</a>.
+                Get a free key at <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="text-violet-400 hover:underline">Google AI Studio</a>. Saved locally on this device.
               </p>
             </div>
 
@@ -173,8 +174,8 @@ export default function SetupScreen({ onComplete, onCancel, initialConfig }: Set
                   <User size={15} className="text-pink-400" />
                   Your Name
                 </label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   value={userName}
                   onChange={(e) => setUserName(e.target.value)}
                   placeholder="e.g., Ashwani"
@@ -187,11 +188,11 @@ export default function SetupScreen({ onComplete, onCancel, initialConfig }: Set
                   <Sparkles size={15} className="text-cyan-400" />
                   Companion Name
                 </label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   value={assistantName}
                   onChange={(e) => setAssistantName(e.target.value)}
-                  placeholder="e.g., Maya, Tara, Priya"
+                  placeholder="e.g., S.U.H.A.N.I, Maya, Tara"
                   className="w-full bg-black/40 border border-white/10 rounded-xl px-3.5 py-2.5 sm:py-3 text-xs sm:text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-cyan-500 transition-colors"
                 />
               </div>
@@ -250,7 +251,7 @@ export default function SetupScreen({ onComplete, onCancel, initialConfig }: Set
                   Personality & Behavior (System Prompt)
                 </div>
               </label>
-              <textarea 
+              <textarea
                 value={systemPrompt}
                 onChange={(e) => setSystemPrompt(e.target.value)}
                 placeholder="Leave blank to use her default sweet Indian companion personality..."
@@ -263,10 +264,10 @@ export default function SetupScreen({ onComplete, onCancel, initialConfig }: Set
             </div>
           </div>
 
-          {/* 3. ALWAYS VISIBLE STICKY FOOTER (CANCEL & SAVE BUTTONS) */}
+          {/* 3. ALWAYS VISIBLE STICKY FOOTER */}
           <div className="shrink-0 bg-[#161824] border-t border-white/10 px-4 py-3 sm:px-6 sm:py-3.5 flex items-center justify-between gap-3 safe-bottom z-20">
             {onCancel ? (
-              <button 
+              <button
                 type="button"
                 onClick={onCancel}
                 className="px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 active:bg-white/20 text-white/80 font-medium text-xs sm:text-sm border border-white/10 transition-colors cursor-pointer"
@@ -274,10 +275,10 @@ export default function SetupScreen({ onComplete, onCancel, initialConfig }: Set
                 Cancel
               </button>
             ) : (
-              <div className="text-[11px] text-white/40">All changes saved locally</div>
+              <div className="text-[11px] text-white/40">Ready instantly for everyone</div>
             )}
 
-            <button 
+            <button
               type="submit"
               className="flex-1 sm:flex-initial px-6 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 via-pink-600 to-rose-600 hover:from-violet-500 hover:to-rose-500 text-white font-semibold text-xs sm:text-sm shadow-lg shadow-pink-500/25 transition-all duration-300 active:scale-95 cursor-pointer flex items-center justify-center gap-2"
             >

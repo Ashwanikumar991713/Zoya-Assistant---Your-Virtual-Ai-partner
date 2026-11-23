@@ -1,38 +1,32 @@
 {
-  "version": "v2.7.0",
-  "buildNumber": "2026.10.04.1-42706153",
-  "commitHash": "42706153",
-  "buildTimestamp": "2026-10-04T18:36:39.934Z",
-  "lastUpdatedDate": "October 5, 2026",
-  "lastUpdatedTime": "12:06 AM IST",
-  "releaseTitle": "Automated Semantic Versioning & Live Synchronization Engine",
+  "version": "v2.7.5",
+  "buildNumber": "2026.11.12.6-6b4b0ecc",
+  "commitHash": "6b4b0ecc",
+  "buildTimestamp": "2026-11-12T09:36:33.890Z",
+  "lastUpdatedDate": "November 12, 2026",
+  "lastUpdatedTime": "03:06 PM IST",
+  "releaseTitle": "Automated Release & Live Synchronization Update",
   "badge": "Latest Live 🚀",
   "channel": "Production Release",
   "environment": "Cloud Production (Live)",
   "whatsNew": [
     {
-      "title": "Automated Semantic Versioning (ऑटो-वर्ज़न सिस्टम)",
-      "description": "कोड में नए बदलाव इंटरनेट पर डिप्लॉय होते ही सिस्टम स्वतः वर्ज़न को इंक्रीमेंट करता है। मैन्युअल नंबरिंग की ज़रूरत खत्म।",
+      "title": "Automated Version Engine (ऑटो-वर्ज़न इंक्रीमेंट)",
+      "description": "कोड में नए बदलाव होते ही सिस्टम स्वतः वर्ज़न को v2.7.5 पर अपडेट करता है।",
       "icon": "🚀",
       "tag": "Auto-Build"
     },
     {
-      "title": "Standardized Update Button (Check for Updates)",
-      "description": "कन्फ्यूजिंग 'Re-Check Server' को हटाकर स्टैंडर्ड 'Check for Updates' बटन लगाया गया है।",
-      "icon": "🔄",
-      "tag": "UX"
-    },
-    {
-      "title": "Clean Minimal Screen (क्लीन मेन स्क्रीन)",
-      "description": "मेन स्क्रीन बिना किसी अनावश्‍यक वर्ज़न बैज के पूरी तरह क्लीन और डिस्ट्रैक्शन-फ्री है।",
+      "title": "Clean Minimal UI (क्लीन मेन स्क्रीन)",
+      "description": "मेन स्क्रीन को बिना किसी अनावश्‍यक बैज के क्लीन और फ़ास्ट रखा गया है।",
       "icon": "✨",
-      "tag": "Design"
+      "tag": "UI/UX"
     },
     {
-      "title": "Instant Live Sync & Reload (तत्काल अपडेट लागू)",
-      "description": "सर्वर पर नया वर्ज़न मिलते ही 'Reload & Apply' से ऐप तुरंत नए कोड के साथ ताज़ा हो जाता है।",
-      "icon": "⚡",
-      "tag": "Sync"
+      "title": "Instant Live Updates (लाइव अपडेट चेकर)",
+      "description": "Specification में Check for Updates बटन से नए वर्ज़न तुरंत डिटेक्ट और रीलोड होते हैं।",
+      "icon": "🔄",
+      "tag": "Live"
     }
   ],
   "specifications": [
@@ -74,6 +68,79 @@
     }
   ],
   "versionHistory": [
+    {
+      "version": "v2.7.5",
+      "build": "2026.11.12.6-6b4b0ecc",
+      "date": "November 12, 2026",
+      "time": "03:06 PM IST",
+      "title": "Automated Release & Live Synchronization Update",
+      "changes": [
+        "Automated version increment to v2.7.5 on code build",
+        "Build timestamp updated to 03:05 PM IST on November 12, 2026",
+        "Content hash generated: 6b4b0ecc"
+      ]
+    },
+    {
+      "version": "v2.7.4",
+      "build": "2026.11.12.5-10a186fd",
+      "date": "November 12, 2026",
+      "time": "03:02 PM IST",
+      "title": "Automated Release & Live Synchronization Update",
+      "changes": [
+        "Automated version increment to v2.7.4 on code build",
+        "Build timestamp updated to 02:59 PM IST on November 12, 2026",
+        "Content hash generated: 10a186fd"
+      ]
+    },
+    {
+      "version": "v2.8.0",
+      "build": "2026.11.12.5-server-live",
+      "date": "November 12, 2026",
+      "time": "02:45 PM IST",
+      "title": "Full-Stack Server-Side Gemini & Live API Architecture",
+      "changes": [
+        "Created server.ts full-stack Express backend with Gemini Live WebSocket bridge at /api/live-ws",
+        "Migrated text chat and text-to-speech to server REST endpoints",
+        "Removed @google/genai client bundle dependency and cleaned vite.config.ts defines",
+        "Provided instant companion start without setup blocking"
+      ]
+    },
+    {
+      "version": "v2.7.3",
+      "build": "2026.11.12.4-74bc936d",
+      "date": "November 12, 2026",
+      "time": "02:53 PM IST",
+      "title": "Automated Release & Live Synchronization Update",
+      "changes": [
+        "Automated version increment to v2.7.3 on code build",
+        "Build timestamp updated to 02:41 PM IST on November 12, 2026",
+        "Content hash generated: 74bc936d"
+      ]
+    },
+    {
+      "version": "v2.7.2",
+      "build": "2026.11.12.3-c732565b",
+      "date": "November 12, 2026",
+      "time": "02:33 PM IST",
+      "title": "Automated Release & Live Synchronization Update",
+      "changes": [
+        "Automated version increment to v2.7.2 on code build",
+        "Build timestamp updated to 02:30 PM IST on November 12, 2026",
+        "Content hash generated: c732565b"
+      ]
+    },
+    {
+      "version": "v2.7.1",
+      "build": "2026.11.12.2-d0c53744",
+      "date": "November 12, 2026",
+      "time": "02:19 PM IST",
+      "title": "Automated Release & Live Synchronization Update",
+      "changes": [
+        "Automated version increment to v2.7.1 on code build",
+        "Build timestamp updated to 02:19 PM IST on November 12, 2026",
+        "Content hash generated: d0c53744"
+      ]
+    },
     {
       "version": "v2.7.0",
       "build": "2026.10.04.1-42706153",
