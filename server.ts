@@ -1,4 +1,5 @@
-import express, { Request, Response } from "express";
+import express from "express";
+import type { Request, Response } from "express";
 import http from "http";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -6,12 +7,12 @@ import { WebSocketServer, WebSocket } from "ws";
 import dotenv from "dotenv";
 import {
   GoogleGenAI,
-  LiveServerMessage,
   Modality,
   StartSensitivity,
   EndSensitivity,
   ActivityHandling,
 } from "@google/genai";
+import type { LiveServerMessage } from "@google/genai";
 
 dotenv.config();
 
@@ -21,12 +22,25 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const server = http.createServer(app);
 const isDev = process.env.NODE_ENV !== "production";
-const port = isDev ? 3000 : parseInt(process.env.PORT || "3000", 10);
+const port = 3000;
 
 app.use(express.json({ limit: "25mb" }));
 
 // Helper to instantiate server-side GoogleGenAI client with standard User-Agent header
 function getGeminiClient(customKey?: string): GoogleGenAI {
+  const apiKey = (customKey || process.env.GEMINI_API_KEY || "").trim();
+  return new GoogleGenAI({
+    apiKey,
+    httpOptions: {
+      headers: {
+        "User-Agent": "aistudio-build",
+      },
+    },
+  });
+}
+
+// Live API requires v1alpha bidirectional WebSocket endpoint
+function getGeminiLiveClient(customKey?: string): GoogleGenAI {
   const apiKey = (customKey || process.env.GEMINI_API_KEY || "").trim();
   return new GoogleGenAI({
     apiKey,
@@ -38,6 +52,16 @@ function getGeminiClient(customKey?: string): GoogleGenAI {
     },
   });
 }
+
+// Health check endpoint so client knows full-stack server + Live WS bridge is active
+app.get("/api/health", (_req: Request, res: Response) => {
+  res.json({
+    ok: true,
+    mode: "server",
+    liveWs: true,
+    hasServerKey: Boolean((process.env.GEMINI_API_KEY || "").trim()),
+  });
+});
 
 // -------------------------------------------------------------
 // REST Endpoint: Text Generation / Chat (Fallback & Non-Live)
@@ -286,7 +310,7 @@ wss.on("connection", (clientWs: WebSocket) => {
           return;
         }
 
-        const ai = getGeminiClient(effectiveKey);
+        const ai = getGeminiLiveClient(effectiveKey);
 
         const baseInstruction = (config.systemPrompt || "")
           .replace(/{userName}/g, config.userName || "Ashwani")
@@ -470,8 +494,6 @@ server.on("upgrade", (request, socket, head) => {
 // Vite Dev Middlewares (Dev) vs Static Assets (Production)
 // -------------------------------------------------------------
 async function setupServer() {
-  const isDev = process.env.NODE_ENV !== "production";
-
   if (isDev) {
     const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
@@ -482,7 +504,11 @@ async function setupServer() {
   } else {
     const distPath = path.resolve(__dirname, "dist");
     app.use(express.static(distPath));
-    app.get("*", (_req, res) => {
+    app.get("*", (req: Request, res: Response) => {
+      if (req.path.startsWith("/api/")) {
+        res.status(404).json({ error: "API route not found" });
+        return;
+      }
       res.sendFile(path.resolve(distPath, "index.html"));
     });
   }

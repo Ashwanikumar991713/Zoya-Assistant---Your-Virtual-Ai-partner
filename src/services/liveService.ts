@@ -1,5 +1,43 @@
 import { AppConfig, AppState } from "../types";
 
+// Cache backend server capability detection for the current page session
+let cachedServerBridgeAvailable: boolean | null = null;
+
+async function isServerLiveBridgeAvailable(): Promise<boolean> {
+  if (cachedServerBridgeAvailable !== null) {
+    return cachedServerBridgeAvailable;
+  }
+
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 2500);
+    const res = await fetch("/api/health", {
+      method: "GET",
+      cache: "no-store",
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+
+    if (!res.ok) {
+      cachedServerBridgeAvailable = false;
+      return false;
+    }
+
+    const contentType = res.headers.get("content-type") || "";
+    if (!contentType.includes("application/json")) {
+      cachedServerBridgeAvailable = false;
+      return false;
+    }
+
+    const data = await res.json();
+    cachedServerBridgeAvailable = Boolean(data && data.ok === true && data.liveWs === true);
+    return cachedServerBridgeAvailable;
+  } catch {
+    cachedServerBridgeAvailable = false;
+    return false;
+  }
+}
+
 // High performance Uint8Array to base64 converter avoiding heavy GC allocation
 function uint8ToBase64(bytes: Uint8Array): string {
   let binary = "";
@@ -46,8 +84,36 @@ function downsampleTo16k(inputData: Float32Array, inputSampleRate: number): Int1
   return result;
 }
 
+function buildLiveSystemInstruction(config: AppConfig): string {
+  const baseInstruction = (config.systemPrompt || "")
+    .replace(/{userName}/g, config.userName || "Ashwani")
+    .replace(/{assistantName}/g, config.assistantName || "Companion");
+
+  const strictFemaleAndInstantDirective = `
+[MANDATORY FEMALE IDENTITY & VOICE PRESERVATION]
+1. VOCAL GENDER: You are strictly a young Indian female companion named "${config.assistantName || "Companion"}". Your voice is ultra-sweet, gentle, feminine, and heartwarming ("Kore" tone).
+2. UNDER NO CIRCUMSTANCES should you EVER speak in a male, deep, low-pitch, or robotic voice, regardless of language.
+3. Keep your speaking pitch, softness, and feminine warmth 100% consistent across every sentence.
+
+[LIGHTNING FAST DIRECT HUMAN RESPONSE]
+1. ZERO HESITATION: Respond immediately without thinking or pausing.
+2. SHORT, SWEET & CONVERSATIONAL: Keep your spoken replies brief and lively (1 to 2 short sentences per turn). Real humans converse dynamically.
+3. WARM FILLERS: Start naturally with sweet touches: "Haan ji!", "Arey bilkul!", "Sach me?", "Acha bataiye na", "Hmm, sahi kaha aapne".`;
+
+  let topicContext = "";
+  if (config.activeTopicOrScript && config.activeTopicOrScript.trim()) {
+    topicContext = `
+[ACTIVE FOCUS]
+"${config.activeTopicOrScript.trim()}"
+Weave naturally into your thoughts in your own sweet, casual speaking style.`;
+  }
+
+  return baseInstruction + strictFemaleAndInstantDirective + topicContext;
+}
+
 export class LiveSessionManager {
   private activeWs: WebSocket | null = null;
+  private connectionMode: "server-bridge" | "direct-static-fallback" = "server-bridge";
   private isConnecting: boolean = false;
   private isExplicitlyStopped: boolean = false;
   private reconnectTimer: any = null;
@@ -227,14 +293,27 @@ export class LiveSessionManager {
           const uint8 = new Uint8Array(pcm16.buffer, pcm16.byteOffset, pcm16.byteLength);
           const base64Data = uint8ToBase64(uint8);
 
-          // 5. Stream continuous audio to server Live API WebSocket
+          // 5. Stream continuous audio over the active Live WebSocket
           try {
-            this.activeWs.send(
-              JSON.stringify({
-                type: "audio",
-                data: base64Data,
-              })
-            );
+            if (this.connectionMode === "server-bridge") {
+              this.activeWs.send(
+                JSON.stringify({
+                  type: "audio",
+                  data: base64Data,
+                })
+              );
+            } else {
+              this.activeWs.send(
+                JSON.stringify({
+                  realtimeInput: {
+                    audio: {
+                      data: base64Data,
+                      mimeType: "audio/pcm;rate=16000",
+                    },
+                  },
+                })
+              );
+            }
           } catch (err) {
             console.warn("Audio stream send warning:", err);
           }
@@ -250,7 +329,7 @@ export class LiveSessionManager {
       // 3. Request WakeLock
       await this.requestWakeLock();
 
-      // 4. Connect to Server-Side Gemini Live Bridge
+      // 4. Connect to Live Session (prefers server bridge, auto-falls back on static hosts like Vercel)
       await this.connectLiveSession();
     } catch (error) {
       console.error("Failed to start Live Session:", error);
@@ -274,8 +353,26 @@ export class LiveSessionManager {
       this.activeWs = null;
     }
 
+    const hasServerBridge = await isServerLiveBridgeAvailable();
+
+    if (this.isExplicitlyStopped) {
+      this.isConnecting = false;
+      return;
+    }
+
+    if (hasServerBridge) {
+      this.connectionMode = "server-bridge";
+      this.openServerBridgeSocket();
+    } else {
+      this.connectionMode = "direct-static-fallback";
+      this.openDirectStaticSocket();
+    }
+  }
+
+  private openServerBridgeSocket() {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const wsUrl = `${protocol}//${window.location.host}/api/live-ws`;
+    let closedHandled = false;
 
     try {
       const ws = new WebSocket(wsUrl);
@@ -346,9 +443,15 @@ export class LiveSessionManager {
               }
             }
           } else if (msg.type === "close") {
-            this.handleDisconnection(msg.reason || "Connection closed", msg.code);
+            if (!closedHandled) {
+              closedHandled = true;
+              this.handleDisconnection(msg.reason || "Connection closed", msg.code);
+            }
           } else if (msg.type === "error") {
-            this.handleDisconnection(msg.message || "Live API error", msg.code);
+            if (!closedHandled) {
+              closedHandled = true;
+              this.handleDisconnection(msg.message || "Live API error", msg.code);
+            }
           }
         } catch (e) {
           console.warn("Live client message parse error:", e);
@@ -359,7 +462,8 @@ export class LiveSessionManager {
         console.log("Server Live bridge closed:", event);
         this.activeWs = null;
         this.isConnecting = false;
-        if (!this.isExplicitlyStopped) {
+        if (!this.isExplicitlyStopped && !closedHandled) {
+          closedHandled = true;
           this.handleDisconnection(event?.reason || "Bridge closed", event?.code);
         }
       };
@@ -368,17 +472,190 @@ export class LiveSessionManager {
         console.error("Server Live bridge error:", err);
         this.activeWs = null;
         this.isConnecting = false;
-        if (!this.isExplicitlyStopped) {
+        if (!this.isExplicitlyStopped && !closedHandled) {
+          closedHandled = true;
+          // If server bridge failed to even open, invalidate cache so next retry can re-check
+          cachedServerBridgeAvailable = null;
           this.handleDisconnection(err?.message || "WebSocket error", err?.code);
         }
       };
     } catch (err: any) {
       console.warn("Live bridge connect attempt failed:", err);
       this.isConnecting = false;
-      if (!this.isExplicitlyStopped) {
+      if (!this.isExplicitlyStopped && !closedHandled) {
+        closedHandled = true;
         this.handleDisconnection(err?.message || "Connect failed", err?.code);
-      } else {
-        throw err;
+      }
+    }
+  }
+
+  private openDirectStaticSocket() {
+    const cleanApiKey = (this.config.apiKey || "").trim();
+    if (!cleanApiKey) {
+      this.isConnecting = false;
+      this.stop();
+      this.onError({
+        message:
+          "Static hosting par Live server available nahi hai. Kripya Settings me apna Gemini API Key paste karein.",
+        isFatal: true,
+        reason: "Missing API Key",
+      });
+      return;
+    }
+
+    const validFemaleVoices = ["Kore", "Aoede"];
+    const rawVoice = (this.config.voiceName || "").trim();
+    const voiceToUse = validFemaleVoices.includes(rawVoice) ? rawVoice : "Kore";
+    const systemInstruction = buildLiveSystemInstruction(this.config);
+
+    const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=${encodeURIComponent(
+      cleanApiKey
+    )}`;
+    let closedHandled = false;
+
+    try {
+      const ws = new WebSocket(wsUrl);
+      this.activeWs = ws;
+
+      ws.onopen = () => {
+        console.log("Connected to Gemini Live WebSocket (static hosting mode)");
+        ws.send(
+          JSON.stringify({
+            setup: {
+              model: "models/gemini-3.8-live",
+              generationConfig: {
+                responseModalities: ["AUDIO"],
+                speechConfig: {
+                  voiceConfig: {
+                    prebuiltVoiceConfig: {
+                      voiceName: voiceToUse,
+                    },
+                  },
+                },
+              },
+              systemInstruction: {
+                parts: [{ text: systemInstruction }],
+              },
+              inputAudioTranscription: {},
+              outputAudioTranscription: {},
+              realtimeInputConfig: {
+                automaticActivityDetection: {
+                  disabled: false,
+                  startOfSpeechSensitivity: "START_SENSITIVITY_HIGH",
+                  endOfSpeechSensitivity: "END_SENSITIVITY_HIGH",
+                  silenceDurationMs: 250,
+                  prefixPaddingMs: 80,
+                },
+                activityHandling: "START_OF_ACTIVITY_INTERRUPTS",
+              },
+            },
+          })
+        );
+      };
+
+      ws.onmessage = async (event) => {
+        try {
+          let textData: string;
+          if (event.data instanceof Blob) {
+            textData = await event.data.text();
+          } else if (typeof event.data === "string") {
+            textData = event.data;
+          } else {
+            textData = new TextDecoder().decode(event.data);
+          }
+
+          const serverMessage = JSON.parse(textData);
+
+          if (serverMessage.setupComplete) {
+            this.isConnecting = false;
+            this.reconnectAttempts = 0;
+            this.onStateChange("listening");
+            return;
+          }
+
+          // 1. Voice activity events
+          if (serverMessage.voiceActivity?.voiceActivityType === "ACTIVITY_START") {
+            if (this.isPlaying) {
+              this.stopPlayback();
+            }
+            this.isUserSpeaking = true;
+            this.onStateChange("listening");
+          } else if (serverMessage.voiceActivity?.voiceActivityType === "ACTIVITY_END") {
+            this.isUserSpeaking = false;
+            this.setAppProcessing();
+          }
+
+          // 2. Audio chunks (strictly once per modelTurn part)
+          const parts = serverMessage.serverContent?.modelTurn?.parts || [];
+          for (const part of parts) {
+            if (part.inlineData?.data) {
+              this.playAudioChunk(part.inlineData.data);
+            }
+          }
+
+          // 3. Interruption (Barge-in)
+          if (serverMessage.serverContent?.interrupted) {
+            this.stopPlayback();
+            this.onStateChange("listening");
+          }
+
+          // 4. Turn Complete
+          if (serverMessage.serverContent?.turnComplete) {
+            if (this.processingSafetyTimer) {
+              clearTimeout(this.processingSafetyTimer);
+              this.processingSafetyTimer = null;
+            }
+            if (!this.isPlaying) {
+              this.onStateChange("listening");
+            }
+          }
+
+          // 5. Companion Transcriptions
+          const companionText =
+            serverMessage.serverContent?.outputTranscription?.text ||
+            serverMessage.serverContent?.modelTurn?.parts?.find((p: any) => p.text)?.text;
+          if (companionText && companionText.trim()) {
+            this.onMessage("zoya", companionText.trim());
+            this.detectAndTriggerAction(companionText.trim());
+          }
+
+          // 6. User Spoken Transcription
+          const userTranscription = serverMessage.serverContent?.inputTranscription?.text;
+          if (userTranscription && userTranscription.trim() && userTranscription.trim() !== this.lastUserTranscript) {
+            this.lastUserTranscript = userTranscription.trim();
+            this.onMessage("user", this.lastUserTranscript);
+            this.detectAndTriggerAction(this.lastUserTranscript);
+          }
+        } catch (e) {
+          console.warn("Direct Live WebSocket message parse error:", e);
+        }
+      };
+
+      ws.onclose = (event) => {
+        console.log("Direct Gemini Live WebSocket closed:", event.code, event.reason);
+        this.activeWs = null;
+        this.isConnecting = false;
+        if (!this.isExplicitlyStopped && !closedHandled) {
+          closedHandled = true;
+          this.handleDisconnection(event?.reason || `Connection closed (${event?.code || ""})`, event?.code);
+        }
+      };
+
+      ws.onerror = (err: any) => {
+        console.error("Direct Gemini Live WebSocket error:", err);
+        this.activeWs = null;
+        this.isConnecting = false;
+        if (!this.isExplicitlyStopped && !closedHandled) {
+          closedHandled = true;
+          this.handleDisconnection(err?.message || "WebSocket connection failed", err?.code);
+        }
+      };
+    } catch (err: any) {
+      console.warn("Direct Live WebSocket connect failed:", err);
+      this.isConnecting = false;
+      if (!this.isExplicitlyStopped && !closedHandled) {
+        closedHandled = true;
+        this.handleDisconnection(err?.message || "Connect failed", err?.code);
       }
     }
   }
@@ -392,6 +669,7 @@ export class LiveSessionManager {
       lower.includes("api key") ||
       lower.includes("api_key") ||
       lower.includes("unauthenticated") ||
+      lower.includes("permission denied") ||
       lower.includes("invalid argument");
 
     const isQuotaError =
@@ -402,10 +680,10 @@ export class LiveSessionManager {
       lower.includes("resource_exhausted");
 
     if (isApiKeyError) {
-      console.error("Fatal API Key error detected from Server Live API:", reason, code);
+      console.error("Fatal API Key error detected from Live API:", reason, code);
       this.stop();
       this.onError({
-        message: "Gemini API key missing ya invalid hai. Kripya Settings me jaakar apna Gemini API Key paste karein.",
+        message: "Gemini API key invalid ya expire ho gayi hai. Kripya Settings me jaakar valid Gemini API Key paste karein.",
         isFatal: true,
         reason: reason || "API key not valid (Code 1007)",
       });
@@ -416,7 +694,7 @@ export class LiveSessionManager {
       console.error("Fatal Quota error detected from Live API:", reason, code);
       this.stop();
       this.onError({
-        message: "Gemini API quota exceed ho gaya hai. Kripya thodi der baad koshish karein.",
+        message: "Gemini API quota exceed ho gaya hai ya permission denied hai. Kripya thodi der baad koshish karein ya doosri API Key use karein.",
         isFatal: true,
         reason: reason || "Quota Exceeded (Code 1008)",
       });
@@ -445,7 +723,7 @@ export class LiveSessionManager {
       this.stop();
       this.onError({
         message:
-          "Server se live connection 3 koshishon ke baad bhi nahi jud saka. Kripya network connection check karke dobara connect karein.",
+          "Server se live connection 3 koshishon ke baad bhi nahi jud saka. Kripya apna internet connection ya Settings me API Key check karke dobara connect karein.",
         isFatal: false,
         reason: reason || "Connection timeout after 3 retries",
       });
@@ -681,6 +959,10 @@ export class LiveSessionManager {
 
     if (this.activeWs) {
       try {
+        this.activeWs.onopen = null;
+        this.activeWs.onmessage = null;
+        this.activeWs.onclose = null;
+        this.activeWs.onerror = null;
         this.activeWs.close();
       } catch {}
       this.activeWs = null;
@@ -706,6 +988,10 @@ export class LiveSessionManager {
 
     if (voiceChanged && this.activeWs && !this.isExplicitlyStopped) {
       try {
+        this.activeWs.onopen = null;
+        this.activeWs.onmessage = null;
+        this.activeWs.onclose = null;
+        this.activeWs.onerror = null;
         this.activeWs.close();
       } catch {}
       this.activeWs = null;
@@ -716,12 +1002,23 @@ export class LiveSessionManager {
 
     if (this.activeWs && this.activeWs.readyState === WebSocket.OPEN && newConfig.activeTopicOrScript?.trim()) {
       try {
-        this.activeWs.send(
-          JSON.stringify({
-            type: "updateTopic",
-            topic: newConfig.activeTopicOrScript.trim(),
-          })
-        );
+        const topicText = newConfig.activeTopicOrScript.trim();
+        if (this.connectionMode === "server-bridge") {
+          this.activeWs.send(
+            JSON.stringify({
+              type: "updateTopic",
+              topic: topicText,
+            })
+          );
+        } else {
+          this.activeWs.send(
+            JSON.stringify({
+              realtimeInput: {
+                text: `[SYSTEM: Active topic or focus updated to: "${topicText}". Weave naturally into conversation in your own sweet, casual speaking style.]`,
+              },
+            })
+          );
+        }
       } catch (e) {
         console.warn("Could not notify active session of topic update:", e);
       }
@@ -731,7 +1028,11 @@ export class LiveSessionManager {
   sendText(text: string) {
     if (this.activeWs && this.activeWs.readyState === WebSocket.OPEN) {
       try {
-        this.activeWs.send(JSON.stringify({ type: "text", text }));
+        if (this.connectionMode === "server-bridge") {
+          this.activeWs.send(JSON.stringify({ type: "text", text }));
+        } else {
+          this.activeWs.send(JSON.stringify({ realtimeInput: { text } }));
+        }
       } catch (err) {
         console.warn("Failed to send text input:", err);
       }
